@@ -19,7 +19,19 @@ class ChessService(chess_pb2_grpc.ChessServiceServicer):
     def __init__(self):
         # In-memory store for active chess rooms
         self.rooms = {}
-        print("[SERVER] Initialized ChessMate Game State Manager")
+        # Pre-seed default demonstration room "1" for Exp 8 caching & gateway queries
+        seed_board = chess.Board()
+        seed_board.push_san("e4")
+        seed_board.push_san("e5")
+        seed_board.push_san("Nf3")
+        self.rooms["1"] = {
+            "room_name": "Grandmaster Tournament Table 1",
+            "host_email": "grandmaster@chessmate.io",
+            "board": seed_board,
+            "moves": ["e4", "e5", "Nf3"],
+            "status": "active"
+        }
+        print("[SERVER] Initialized ChessMate Game State Manager (Seeded Room '1')")
 
     def CreateRoom(self, request, context):
         # Generate unique 3-digit room code like ChessMate web backend
@@ -142,7 +154,7 @@ class ChessService(chess_pb2_grpc.ChessServiceServicer):
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     chess_pb2_grpc.add_ChessServiceServicer_to_server(ChessService(), server)
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port('0.0.0.0:50051')
     server.start()
     print("=" * 65)
     print("Chess Service Started on Port 50051...")

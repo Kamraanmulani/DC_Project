@@ -1,4 +1,6 @@
-grpcio>=1.84.0
-grpcio-tools>=1.84.0
-protobuf>=7.36.2
+grpcio>=1.83.0
+grpcio-tools>=1.83.0
+protobuf>=5.29.0
 chess>=1.11.2
+redis>=5.0.1
+fakeredis>=2.20.0
