@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package lamport_chessmate;
+
+// Lamport-Synchronized Chess Service RPC Definition for Experiment 3
+service LamportChessService {
+  // RPC to create a room with Lamport timestamp
+  rpc CreateRoom (LamportCreateRoomRequest) returns (LamportCreateRoomResponse);
+
+  // RPC to make a move with Lamport timestamp
+  rpc MakeMove (LamportMakeMoveRequest) returns (LamportMakeMoveResponse);
+
+  // RPC to query game state with Lamport timestamp
+  rpc GetGameState (LamportGetGameStateRequest) returns (LamportGetGameStateResponse);
+}
+
+// Create Room Request with Lamport Time
+message LamportCreateRoomRequest {
+  string room_name = 1;
+  string player_email = 2;
+  string player_color = 3;
+  int64 lamport_time = 4;
+}
+
+// Create Room Response with Lamport Time
+message LamportCreateRoomResponse {
+  string room_code = 1;
+  string game_id = 2;
+  string status = 3;
+  string message = 4;
+  int64 lamport_time = 5;
+}
+
+// Make Move Request with Lamport Time
+message LamportMakeMoveRequest {
+  string room_code = 1;
+  string player_color = 2;
+  string from_square = 3;
+  string to_square = 4;
+  string promotion = 5;
+  int64 lamport_time = 6;
+}
+
+// Make Move Response with Lamport Time
+message LamportMakeMoveResponse {
+  bool is_valid = 1;
+  string move_san = 2;
+  string current_fen = 3;
+  string current_turn = 4;
+  bool is_check = 5;
+  bool is_checkmate = 6;
+  bool is_game_over = 7;
+  string message = 8;
+  int64 lamport_time = 9;
+}
+
+// Get Game State Request with Lamport Time
+message LamportGetGameStateRequest {
+  string room_code = 1;
+  int64 lamport_time = 2;
+}
+
+// Get Game State Response with Lamport Time
+message LamportGetGameStateResponse {
+  string room_code = 1;
+  string status = 2;
+  string current_turn = 3;
+  string fen = 4;
+  int32 move_count = 5;
+  repeated string move_history = 6;
+  string message = 7;
+  int64 lamport_time = 8;
+}
