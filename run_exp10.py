@@ -11,17 +11,45 @@ import service_pb2
 import service_pb2_grpc
 import net_config
 
+import shutil
+
 WORKER_PORTS = [60201, 60202, 60203]
 
 
-def wait_for_port(ip, port, timeout=5.0):
+def get_docker_cmd():
+    cmd = shutil.which("docker")
+    if cmd:
+        return cmd
+    win_paths = [
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe"),
+        r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+    ]
+    for p in win_paths:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def is_docker_running(docker_cmd):
+    if not docker_cmd:
+        return False
+    try:
+        res = subprocess.run([docker_cmd, "ps"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+def wait_for_port(ip, port, timeout=12.0):
     start = time.time()
     while time.time() - start < timeout:
         try:
-            with socket.create_connection((ip, port), timeout=0.2):
+            with grpc.insecure_channel(f"{ip}:{port}") as ch:
+                stub = service_pb2_grpc.WorkerServiceStub(ch)
+                stub.HandleRequest(service_pb2.WorkRequest(request_id=0), timeout=0.5)
                 return True
-        except (OSError, ConnectionRefusedError):
-            time.sleep(0.1)
+        except Exception:
+            time.sleep(0.2)
     return False
 
 
@@ -77,25 +105,52 @@ def run_replica_load_burst():
     print("STAGE 3: Deploying 3-Replica Worker Pool & Simulating gRPC Load Burst")
     print("-" * 75)
 
+    docker_bin = get_docker_cmd()
+    use_docker = is_docker_running(docker_bin)
+    
+    if use_docker:
+        print(f"  [DOCKER MODE] Active Docker Engine detected ({docker_bin})")
+        print("  [DOCKER MODE] Launching 3 real container replicas from 'myapp-backend:latest'...")
+    else:
+        print("  [EMULATION MODE] Docker engine not active in PATH; using in-process subprocess emulation.")
+
+    containers = {}
     processes = {}
+
     for port in WORKER_PORTS:
-        proc = subprocess.Popen(
-            [sys.executable, "-u", "worker_server.py", str(port)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
-        processes[port] = proc
+        if use_docker:
+            cname = f"worker-exp10-{port}"
+            subprocess.run([docker_bin, "rm", "-f", cname], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(
+                [docker_bin, "run", "--name", cname, "-p", f"{port}:{port}", "myapp-backend:latest", "worker_server.py", str(port)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+            containers[port] = (cname, proc)
+        else:
+            proc = subprocess.Popen(
+                [sys.executable, "-u", "worker_server.py", str(port)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            processes[port] = proc
 
     # Wait for all 3 worker replicas to open sockets
     for port in WORKER_PORTS:
-        if not wait_for_port("127.0.0.1", port, timeout=5.0):
+        if not wait_for_port("127.0.0.1", port, timeout=8.0):
             print(f"Error: Worker on port {port} failed to start.")
-            for p in processes.values():
-                p.terminate()
+            if use_docker:
+                for cname, _ in containers.values():
+                    subprocess.run([docker_bin, "rm", "-f", cname], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                for p in processes.values():
+                    p.terminate()
             sys.exit(1)
-        print(f"  [Worker Replica] Online and listening on 127.0.0.1:{port}")
+        tag = "[Real Docker Container]" if use_docker else "[Worker Replica]"
+        print(f"  {tag} Online and listening on 127.0.0.1:{port}")
 
     # Simulate Headless DNS resolver returning all 3 pod endpoints
     endpoints = [f"127.0.0.1:{p}" for p in WORKER_PORTS]
@@ -160,9 +215,14 @@ def run_replica_load_burst():
     print("-" * 75)
     failed_port = WORKER_PORTS[1]  # 60202
     print(f"[ACTION] Simulating pod crash: Killing Worker Pod on port {failed_port}...")
-    processes[failed_port].terminate()
-    processes[failed_port].wait()
-    del processes[failed_port]
+    if use_docker:
+        cname, _ = containers[failed_port]
+        subprocess.run([docker_bin, "rm", "-f", cname], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        del containers[failed_port]
+    else:
+        processes[failed_port].terminate()
+        processes[failed_port].wait()
+        del processes[failed_port]
     print(f"[STATUS] Pod :{failed_port} is DEAD. Surviving pods: {[p for p in WORKER_PORTS if p != failed_port]}")
 
     surviving_endpoints = [f"127.0.0.1:{p}" for p in WORKER_PORTS if p != failed_port]
@@ -177,24 +237,40 @@ def run_replica_load_burst():
     print(f"  All 6 requests succeeded! Handled by survivors: {Counter(survivor_calls)}")
 
     print(f"\n[ACTION] Simulating Kubernetes Self-Healing: Replacing pod :{failed_port}...")
-    new_proc = subprocess.Popen(
-        [sys.executable, "-u", "worker_server.py", str(failed_port)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
-    )
-    processes[failed_port] = new_proc
-    wait_for_port("127.0.0.1", failed_port, timeout=5.0)
+    if use_docker:
+        cname = f"worker-exp10-{failed_port}"
+        proc = subprocess.Popen(
+            [docker_bin, "run", "--name", cname, "-p", f"{failed_port}:{failed_port}", "myapp-backend:latest", "worker_server.py", str(failed_port)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        containers[failed_port] = (cname, proc)
+    else:
+        new_proc = subprocess.Popen(
+            [sys.executable, "-u", "worker_server.py", str(failed_port)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        processes[failed_port] = new_proc
+    wait_for_port("127.0.0.1", failed_port, timeout=8.0)
     print(f"[STATUS] Pod :{failed_port} RESTARTED by Kubernetes and rejoined healthy cluster pool.")
 
     # Cleanup
-    for p in processes.values():
-        p.terminate()
-        try:
-            p.wait(timeout=1.0)
-        except subprocess.TimeoutExpired:
-            p.kill()
+    if use_docker:
+        print("\n[CLEANUP] Stopping and removing all Docker worker containers...")
+        for cname, _ in containers.values():
+            subprocess.run([docker_bin, "rm", "-f", cname], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("  [OK] Docker containers removed cleanly.")
+    else:
+        for p in processes.values():
+            p.terminate()
+            try:
+                p.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                p.kill()
 
     print("\n" + "=" * 75)
     print("Experiment 10 execution completed successfully!")
