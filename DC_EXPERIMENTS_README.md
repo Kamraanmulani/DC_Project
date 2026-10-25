@@ -1,11 +1,11 @@
-# ♟️ Distributed Computing (DC) Lab Experiments (2, 3, 4, 5, 6, 7 & 8): ChessMate
+# ♟️ Distributed Computing (DC) Lab Experiments (2, 3, 4, 5, 6, 7, 8 & 9): ChessMate
 
 **Subject**: Distributed Computing (Sem 7)  
 **Faculty**: Prof. Dhanashree Tamhane  
 **Project**: **ChessMate** (Distributed Multiplayer Chess Platform)  
-**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, python-chess  
+**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, Raft Consensus Leader Election & Failover, python-chess  
 
-> 📖 **Comprehensive In-Depth Guide & Viva Q&A**: See [EXPERIMENTS_2_TO_8_README.md](EXPERIMENTS_2_TO_8_README.md) for full architectural breakdowns, mathematical proofs, diagrams, and top 40 viva questions.
+> 📖 **Comprehensive In-Depth Guide & Viva Q&A**: See [EXPERIMENTS_2_TO_9_README.md](EXPERIMENTS_2_TO_9_README.md) for full architectural breakdowns, mathematical proofs, diagrams, and top 45 viva questions.
 
 ---
 
@@ -13,13 +13,14 @@
 
 | Exp # | Experiment Title | Key Mechanism | Files |
 |:---:|:---|:---|:---|
-| **2** | **RPC APIs Between Services** | gRPC over HTTP/2, Protobuf binary serialization | [`proto/chess.proto`](file:///d:/DC%20-%20ChessMate/proto/chess.proto), [`chess_server.py`](file:///d:/DC%20-%20ChessMate/chess_server.py), [`chess_client.py`](file:///d:/DC%20-%20ChessMate/chess_client.py) |
-| **3** | **Lamport Clock Synchronization** | Logical clocks, Happened-before relation ($a \to b$), $L = \max(L, L_{msg}) + 1$ | [`lamport_clock.py`](file:///d:/DC%20-%20ChessMate/lamport_clock.py), [`proto/lamport_chess.proto`](file:///d:/DC%20-%20ChessMate/proto/lamport_chess.proto), [`lamport_chess_server.py`](file:///d:/DC%20-%20ChessMate/lamport_chess_server.py), [`lamport_chess_client.py`](file:///d:/DC%20-%20ChessMate/lamport_chess_client.py) |
-| **4** | **Ricart-Agrawala Mutual Exclusion** | P2P Mutex, deferred replies via blocking gRPC handlers, tie-breaking `(timestamp, node_id)` | [`node.py`](file:///d:/DC%20-%20ChessMate/node.py), [`run_exp4.py`](file:///d:/DC%20-%20ChessMate/run_exp4.py), [`proto/artwork.proto`](file:///d:/DC%20-%20ChessMate/proto/artwork.proto) |
-| **5** | **Deadlock Simulation & Resolution** | Wait-For Graph (WFG) cycle detection, reverse lock acquisition order, abort & retry | [`lock_manager.py`](file:///d:/DC%20-%20ChessMate/lock_manager.py), [`worker.py`](file:///d:/DC%20-%20ChessMate/worker.py), [`run_exp5.py`](file:///d:/DC%20-%20ChessMate/run_exp5.py) |
-| **6** | **Load Balancing (Least Connections)** | Dynamic routing to backend with minimum in-flight connections, thread-safe counter tracking | [`proto/service.proto`](file:///d:/DC%20-%20ChessMate/proto/service.proto), [`worker_server.py`](file:///d:/DC%20-%20ChessMate/worker_server.py), [`load_balancer.py`](file:///d:/DC%20-%20ChessMate/load_balancer.py), [`run_exp6.py`](file:///d:/DC%20-%20ChessMate/run_exp6.py) |
-| **7** | **Eventual Consistency (Gossip + LWW)** | Accept-then-gossip asynchronous replication, deterministic Last-Write-Wins via `(lamport_timestamp, origin_replica)` | [`proto/replica.proto`](file:///d:/DC%20-%20ChessMate/proto/replica.proto), [`replica_node.py`](file:///d:/DC%20-%20ChessMate/replica_node.py), [`replica_client.py`](file:///d:/DC%20-%20ChessMate/replica_client.py), [`run_exp7.py`](file:///d:/DC%20-%20ChessMate/run_exp7.py) |
-| **8** | **Redis Caching & Fault Tolerance** | Cache-Aside pattern, dual-key fresh short-TTL + stale fallback, graceful degradation | [`cache_gateway.py`](file:///d:/DC%20-%20ChessMate/cache_gateway.py), [`server.py`](file:///d:/DC%20-%20ChessMate/server.py), [`redis_server.py`](file:///d:/DC%20-%20ChessMate/redis_server.py), [`run_exp8.py`](file:///d:/DC%20-%20ChessMate/run_exp8.py) |
+| **2** | **RPC APIs Between Services** | gRPC over HTTP/2, Protobuf binary serialization | [`proto/chess.proto`](proto/chess.proto), [`chess_server.py`](chess_server.py), [`chess_client.py`](chess_client.py) |
+| **3** | **Lamport Clock Synchronization** | Logical clocks, Happened-before relation ($a \to b$), $L = \max(L, L_{msg}) + 1$ | [`lamport_clock.py`](lamport_clock.py), [`proto/lamport_chess.proto`](proto/lamport_chess.proto), [`lamport_chess_server.py`](lamport_chess_server.py), [`lamport_chess_client.py`](lamport_chess_client.py) |
+| **4** | **Ricart-Agrawala Mutual Exclusion** | P2P Mutex, deferred replies via blocking gRPC handlers, tie-breaking `(timestamp, node_id)` | [`node.py`](node.py), [`run_exp4.py`](run_exp4.py), [`proto/artwork.proto`](proto/artwork.proto) |
+| **5** | **Deadlock Simulation & Resolution** | Wait-For Graph (WFG) cycle detection, reverse lock acquisition order, abort & retry | [`lock_manager.py`](lock_manager.py), [`worker.py`](worker.py), [`run_exp5.py`](run_exp5.py) |
+| **6** | **Load Balancing (Least Connections)** | Dynamic routing to backend with minimum in-flight connections, thread-safe counter tracking | [`proto/service.proto`](proto/service.proto), [`worker_server.py`](worker_server.py), [`load_balancer.py`](load_balancer.py), [`run_exp6.py`](run_exp6.py) |
+| **7** | **Eventual Consistency (Gossip + LWW)** | Accept-then-gossip asynchronous replication, deterministic Last-Write-Wins via `(lamport_timestamp, origin_replica)` | [`proto/replica.proto`](proto/replica.proto), [`replica_node.py`](replica_node.py), [`replica_client.py`](replica_client.py), [`run_exp7.py`](run_exp7.py) |
+| **8** | **Redis Caching & Fault Tolerance** | Cache-Aside pattern, dual-key fresh short-TTL + stale fallback, graceful degradation | [`cache_gateway.py`](cache_gateway.py), [`server.py`](server.py), [`redis_server.py`](redis_server.py), [`run_exp8.py`](run_exp8.py) |
+| **9** | **Raft Leader Election & Failover** | Consensus-driven fault tolerance, randomized election timeouts (1.5–3.0s), terms, quorum voting ($N//2+1$), gated coordination | [`proto/raft.proto`](proto/raft.proto), [`raft_node.py`](raft_node.py), [`raft_client.py`](raft_client.py), [`run_exp9.py`](run_exp9.py) |
 
 ---
 
@@ -71,6 +72,14 @@
   * Terminal 2 (Backend): `python server.py` (or `python chess_server.py`)
   * Terminal 3 (Gateway): `python cache_gateway.py 1`
 
+### Experiment 9: Raft Leader Election & Failover (Consensus)
+* **Automated Runner (All 4 Stages)**: `python run_exp9.py`
+* **Manual 4 Terminals**:
+  * Terminal 1: `python raft_node.py A`
+  * Terminal 2: `python raft_node.py B`
+  * Terminal 3: `python raft_node.py C`
+  * Terminal 4 (Client Queries): `python raft_client.py A championship_slot 1`
+
 ---
 
 ## 🎯 Viva Q&A Quick Summary
@@ -82,3 +91,5 @@
 5. **Exp 6 (Load Balancing - Least Connections)**: Routes incoming requests to whichever backend currently has the minimum active (in-flight) connections; unlike static Round Robin, it dynamically balances load across backends with variable processing times.
 6. **Exp 7 (Eventual Consistency - Gossip & LWW)**: Replicas accept local writes immediately (maximizing availability) and gossip asynchronously. Conflicts are resolved via Last-Write-Wins using `(lamport_timestamp, origin_replica)` tuples, guaranteeing eventual convergence after a brief disagreement window.
 7. **Exp 8 (Redis Caching & Fault Tolerance - Cache-Aside)**: Dual-key caching architecture where fast reads hit fresh keys (`fresh:item:` with TTL), and the system degrades gracefully under failure: if Redis fails, queries bypass directly to the backend; if the backend fails, queries fall back to never-expiring stale backup keys (`stale:item:`).
+8. **Exp 9 (Raft Leader Election & Failover)**: Consensus protocol establishing a single coordinator among replicas using randomized election timeouts (1.5–3.0s) to prevent split votes, monotonically increasing term counters to reject stale leaders, majority quorum ($N//2 + 1$) voting, and gated coordination where only the current active leader grants locks while followers redirect clients.
+

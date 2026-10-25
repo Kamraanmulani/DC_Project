@@ -1,9 +1,9 @@
-# 🏆 Distributed Computing (DC) Lab: Experiments 2 to 8 Comprehensive Guide
+# 🏆 Distributed Computing (DC) Lab: Experiments 2 to 9 Comprehensive Guide
 
 **Course**: Distributed Computing (Sem 7 - Computer Engineering)  
 **Faculty In-Charge**: Prof. Dhanashree Tamhane  
 **Mini-Project**: **ChessMate** (Distributed Multiplayer Chess Platform)  
-**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, python-chess  
+**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, Raft Consensus Leader Election & Failover, python-chess  
 
 ---
 
@@ -16,14 +16,15 @@
 6. [Experiment 6: Load Balancing Strategy (Least Connections)](#-experiment-6-load-balancing-strategy-least-connections)
 7. [Experiment 7: Eventual Consistency (Gossip Replication + Last-Write-Wins)](#-experiment-7-eventual-consistency)
 8. [Experiment 8: Redis Caching for Fault Tolerance (Cache-Aside Pattern)](#-experiment-8-redis-caching-for-fault-tolerance)
-9. [Master Viva Cheat-Sheet (Top 40 Questions & Answers)](#-master-viva-cheat-sheet-top-40-questions--answers)
-10. [Quick Command Reference Guide](#-quick-command-reference-guide)
+9. [Experiment 9: Raft Leader Election & Failover for Uninterrupted Coordination](#-experiment-9-raft-leader-election--failover)
+10. [Master Viva Cheat-Sheet (Top 45 Questions & Answers)](#-master-viva-cheat-sheet-top-45-questions--answers)
+11. [Quick Command Reference Guide](#-quick-command-reference-guide)
 
 ---
 
 ## 🏛️ Overview & Project Architecture
 
-In modern distributed systems, standalone monolithic architectures are replaced by decoupled microservices that communicate over the network. Throughout Experiments 2 to 8, we have implemented the complete distributed computing hierarchy for our **ChessMate** platform:
+In modern distributed systems, standalone monolithic architectures are replaced by decoupled microservices that communicate over the network. Throughout Experiments 2 to 9, we have implemented the complete distributed computing hierarchy for our **ChessMate** platform:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -36,6 +37,7 @@ In modern distributed systems, standalone monolithic architectures are replaced 
 │  [Exp 6] Dynamic Load Balancing   : Least Connections Router (min active conn)│
 │  [Exp 7] Eventual Consistency     : Gossip Replication + LWW (Lamport Clocks)│
 │  [Exp 8] Fault-Tolerant Caching   : Cache-Aside (Dual-Key Fresh/Stale Redis) │
+│  [Exp 9] Fault-Tolerant Consensus : Raft Leader Election & Failover (Quorum) │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -659,7 +661,179 @@ Result (source=stale-fallback): {'item_id': 1, 'data': 'Active Room 1: fen=rnbqk
 
 ---
 
-## 🎯 Master Viva Cheat-Sheet: Top 40 Questions & Answers
+## 9. Experiment 9: Raft Leader Election & Failover for Uninterrupted Coordination
+
+### 1. Aim
+To design, implement, and evaluate a resilient **Raft-Based Distributed Consensus** cluster providing high-availability leader election, randomized heartbeat timeouts, and automatic failover, while gating centralized coordination operations (such as distributed lock grants and tournament coordination) behind the active elected leader.
+
+### 2. Motivation & Single Point of Failure (SPOF)
+In earlier experiments (such as Experiment 5's centralized Lock Manager or Experiment 6's Load Balancer), coordination relies on a single "coordinator" process. If that single coordinator process dies or loses network connectivity, the entire coordination capability collapses—no locks can be granted, no tournaments can be scheduled, and workers block indefinitely.
+The **Raft Consensus Protocol** solves this fundamental limitation:
+* **High Availability**: Coordination logic runs as a replicated cluster (e.g., 3 nodes: A, B, C).
+* **Guaranteed Leadership**: Exactly one replica is elected as the active "Leader", while the others act as passive "Followers".
+* **Automatic Failover**: When the active leader crashes, surviving followers detect the absence of periodic heartbeats within a randomized election window (1.5s–3.0s), trigger a new election term, and elect a new leader using majority quorum ($N//2 + 1$). Coordination recovers automatically without human intervention.
+
+### 3. ChessMate System Integration
+In our **ChessMate** multiplayer platform:
+* Multiple chess tournaments and championship slots require exclusive distributed locks to prevent split-bracket corruption or conflicting autosaves.
+* Instead of running an isolated `lock_manager.py` that can crash, we deploy a **3-node Raft consensus cluster** ([`raft_node.py`](raft_node.py) on ports 60401, 60402, 60403).
+* Replicas expose both `RaftService` (for cluster consensus) and `LockService` (for client coordination) on the same gRPC server port.
+* **Leadership Gating**: Follower replicas strictly refuse client lock requests with `not-leader,try=<leader_id>`, redirecting players/workers to the active leader.
+* **Transparent Failover**: If the active leader server hosting Node-C suffers a hardware failure, Node-B detects missed heartbeats, wins election at Term 2, and seamlessly assumes lock granting duties.
+
+### 4. Technical Architecture & Raft Mechanics
+```
+   +-------------------------------------------------------------------------+
+   |                       ChessMate Client / Workers                        |
+   +--------------------+--------------------------------+-------------------+
+                        |                                |
+        [Follower Query | Refused]       [Leader Query | Granted]
+                        v                                v
+         +-----------------------------+  Heartbeat (0.5s)  +---------------+
+         |    RaftNode-A (Follower)    |<==================>|  RaftNode-C   |
+         |         Port: 60401         |                    |   (LEADER)    |
+         +-----------------------------+                    |  Port: 60403  |
+                        ^                                   +---------------+
+                        | Heartbeat (0.5s)                          ^
+                        v                                           |
+         +-----------------------------+                            |
+         |    RaftNode-B (Follower)    |<===========================+
+         |         Port: 60402         |
+         +-----------------------------+
+```
+
+#### Core Components
+1. **Node Lifecycle States**:
+   * **`FOLLOWER`** (Default): Passively listens for heartbeats from the current leader and resets its election countdown timer.
+   * **`CANDIDATE`**: When election countdown expires, increments term ($T \gets T + 1$), votes for itself, and broadcasts `RequestVote` RPCs to all peers.
+   * **`LEADER`**: If candidate collects a strict majority quorum of votes ($votes > N // 2$), it transitions to `LEADER` and begins broadcasting `AppendEntries` heartbeats every 0.5s to maintain dominance.
+2. **Randomized Election Timeouts (`(1.5s, 3.0s)`)**:
+   * If all nodes used an identical timeout, they would transition to `CANDIDATE` simultaneously and split the votes (e.g. 1 vote each), causing perpetual election deadlocks.
+   * A randomized interval guarantees that one node almost always times out first, acquiring a head start to gather majority votes.
+3. **Monotonic Term Counters (`term`)**:
+   * Terms act as logical time to detect obsolete leaders. A stale leader recovering from a network partition with an old term is immediately demoted to `FOLLOWER` upon observing a higher term in any incoming RPC.
+4. **Quorum Majority Rule ($N//2 + 1$)**:
+   * A 3-node cluster requires $3//2 + 1 = 2$ votes. It can tolerate $1$ node failure and still achieve consensus. A 5-node cluster requires $3$ votes and tolerates $2$ failures.
+5. **Gated Coordination (`AcquireLock` / `ReleaseLock`)**:
+   * Replicas implement `chess_pb2_grpc.LockServiceServicer`.
+   * If `self.state != "LEADER"`, request is rejected with `granted=False, message="not-leader,try={leader_id}"`.
+   * Only the active `LEADER` mutates distributed lock state.
+
+### 5. How to Manually Run Experiment 9
+#### Option A: Automated Multi-Process Runner (Recommended)
+An automated orchestrator starts all 3 replicas, waits for initial election, tests follower refusal, tests leader grant, kills the active leader, verifies Term 2 failover, and confirms post-failover lock acquisition:
+```bash
+python run_exp9.py
+```
+
+#### Option B: Manual Multi-Terminal Execution (Lab PDF Method)
+* **Terminal 1 (Replica A)**:
+  ```bash
+  python raft_node.py A
+  ```
+* **Terminal 2 (Replica B)**:
+  ```bash
+  python raft_node.py B
+  ```
+* **Terminal 3 (Replica C)**:
+  ```bash
+  python raft_node.py C
+  ```
+* **Terminal 4 (Exercise Gated Coordination Client)**:
+  ```bash
+  # Query Follower (Notice refusal and redirect hint to current leader):
+  python raft_client.py A championship_slot 1
+
+  # Query Leader directly (Notice lock is granted):
+  python raft_client.py C championship_slot 1
+
+  # Failover Test: Kill Terminal 3 (Leader) with Ctrl+C
+  # Watch Terminal 1 & 2 detect missing heartbeats and elect a new leader!
+  # Query the surviving new leader:
+  python raft_client.py B championship_slot 2
+  ```
+
+### 6. Expected Output
+```text
+===========================================================================
+DISTRIBUTED COMPUTING LAB - EXPERIMENT 9: RAFT LEADER ELECTION & FAILOVER
+Consensus-Based Fault Tolerance for Uninterrupted Coordination
+===========================================================================
+
+[SETUP] Starting 3 Raft Replicas (Node A, Node B, Node C)...
+  [Node-B] RaftNode-B listening on 127.0.0.1:60402 (port 60402)
+  [Node-A] RaftNode-A listening on 127.0.0.1:60401 (port 60401)
+  [Node-C] RaftNode-C listening on 127.0.0.1:60403 (port 60403)
+[SETUP] All 3 Replicas online and listening.
+
+---------------------------------------------------------------------------
+STAGE 1: Observing Initial Leader Election (Term 1)
+---------------------------------------------------------------------------
+Waiting 4 seconds for election watchdog timeout and vote convergence...
+  [Node-C] [C term=1 CANDIDATE] Starting election
+  [Node-A] [A term=1 FOLLOWER] Voted for C (term 1)
+  [Node-B] [B term=1 FOLLOWER] Voted for C (term 1)
+  [Node-C] [C term=1 LEADER] *** ELECTED LEADER *** (3/3 votes)
+
+[ELECTION VERIFIED] Initial Leader: Node-C (Followers: ['A', 'B'])
+
+---------------------------------------------------------------------------
+STAGE 2: Gated Coordination (Lock Service) Verification
+---------------------------------------------------------------------------
+
+[TEST 2A] Querying Follower Node-A for lock acquisition...
+  Result: granted=False, message='not-leader,try=C'
+  -> SUCCESS: Follower correctly refused request and redirected to leader (C)
+
+[TEST 2B] Querying Active Leader Node-C for lock acquisition...
+  [Node-C] [C term=1 LEADER] Granted lock on 'tournament_board_1' to worker 42
+  Result: granted=True, message='granted by leader C'
+  -> SUCCESS: Active Leader accepted and granted lock.
+
+---------------------------------------------------------------------------
+STAGE 3: Failover Test -- Killing Current Leader (Node-C)
+---------------------------------------------------------------------------
+[ACTION] Terminating Leader Node-C process (simulating server crash)...
+[ACTION] Node-C is DOWN. Surviving replicas: ['A', 'B']
+
+[ACTION] Surviving replicas will detect missing heartbeats (timeout 1.5s - 3.0s)...
+  [Node-B] [B term=2 CANDIDATE] Starting election
+  [Node-A] [A term=2 FOLLOWER] Voted for B (term 2)
+  [Node-B] [B term=2 CANDIDATE] No response from C (may be down)
+  [Node-B] [B term=2 LEADER] *** ELECTED LEADER *** (2/3 votes)
+
+[FAILOVER VERIFIED] New Leader Elected: Node-B!
+Current Cluster Topology: Leader=Node-B, Follower=Node-A, Dead=Node-C
+
+---------------------------------------------------------------------------
+STAGE 4: Post-Failover Gated Coordination via New Leader (Node-B)
+---------------------------------------------------------------------------
+[TEST 4] Requesting new lock 'tournament_board_2' from newly elected Leader Node-B...
+  [Node-B] [B term=2 LEADER] Granted lock on 'tournament_board_2' to worker 99
+  Result: granted=True, message='granted by leader B'
+  -> SUCCESS: Coordination continued seamlessly without manual intervention!
+
+===========================================================================
+Experiment 9 execution completed successfully!
+Raft consensus leader election, failover, and gated coordination verified.
+===========================================================================
+```
+
+### 7. Key Viva Questions for Experiment 9
+* **Q: What is the primary problem Raft solves in distributed systems?**
+  * *A*: Eliminates Single Points of Failure (SPOF) in centralized coordinators by electing a single active leader among replicas that automatically fails over if the leader crashes.
+* **Q: Why must Raft election timeouts be randomized (e.g., 1.5s–3.0s)?**
+  * *A*: To prevent "split votes". If all nodes timed out simultaneously, they would all become candidates and vote for themselves, preventing anyone from acquiring a majority quorum.
+* **Q: Why does Raft require a majority quorum ($N//2 + 1$) rather than unanimity?**
+  * *A*: Unanimity would mean that if even one node fails or slows down, the cluster cannot make decisions. Quorum allows a cluster of $N$ nodes to tolerate up to $\lfloor(N-1)/2\rfloor$ failures.
+* **Q: What is Split-Brain, and how does Raft prevent it?**
+  * *A*: Split-Brain occurs when network partitions divide a cluster into two halves that both elect leaders. Raft prevents this because a candidate must receive a strict majority ($> N/2$); two disjoint partitions cannot both hold a majority simultaneously.
+* **Q: What is "Gated Coordination"?**
+  * *A*: Gating means coordination RPCs (like acquiring locks or assigning tasks) check the node's Raft state first. If the node is not `LEADER`, it rejects the request and returns a redirect hint to the current leader.
+
+---
+
+## 🎯 Master Viva Cheat-Sheet: Top 45 Questions & Answers
 
 | # | Question | Concise Answer for Viva |
 |:---:|:---|:---|
@@ -703,6 +877,11 @@ Result (source=stale-fallback): {'item_id': 1, 'data': 'Active Room 1: fen=rnbqk
 | **38** | How does the Cache Gateway handle Redis outages? | It catches `RedisError` and transparently routes the request directly to the backend service without failing. |
 | **39** | How does the Cache Gateway handle backend crashes? | It catches `RpcError` and serves the latest cached data from the indefinite stale key (`stale-fallback`). |
 | **40** | What is a Cache Stampede and how is it mitigated? | A spike in DB load when a hot key expires and many readers miss at once; mitigated with mutex locking or probabilistic refreshing. |
+| **41** | What is Raft Consensus? | An algorithm for managing a replicated log and ensuring consistent state/leadership across distributed nodes. |
+| **42** | What are the 3 states in a Raft node? | Follower (passive listener), Candidate (starts election upon timeout), Leader (handles coordination and sends heartbeats). |
+| **43** | Why are election timeouts randomized in Raft? | To break symmetry and prevent split votes where multiple candidates divide the vote and deadlock. |
+| **44** | How does Raft prevent Split-Brain? | By requiring a strict majority quorum ($N//2 + 1$) to elect a leader; two partitions cannot both achieve majority. |
+| **45** | What is Gated Coordination in Raft? | Restricting centralized operations (like granting locks) strictly to the elected leader; followers refuse and redirect clients. |
 
 ---
 
@@ -722,6 +901,7 @@ python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/la
 python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/artwork.proto
 python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/service.proto
 python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/replica.proto
+python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/raft.proto
 
 # -------------------------------------------------------------
 # 3. EXPERIMENT 2: gRPC RPC COMMUNICATION
@@ -785,5 +965,16 @@ python run_exp8.py             # Automated (Spawns Redis, Backend & 4-Stage Test
 python redis_server.py 6379   # Terminal 1: Redis Server
 python server.py              # Terminal 2: gRPC Backend Server (Port 50051)
 python cache_gateway.py 1     # Terminal 3: Cache Gateway Client (queries room 1)
+
+# -------------------------------------------------------------
+# 10. EXPERIMENT 9: RAFT LEADER ELECTION & FAILOVER
+# -------------------------------------------------------------
+python run_exp9.py             # Automated (Spawns 3 Replicas, tests failover & lock gating)
+# OR Manual 4 Terminals:
+python raft_node.py A         # Terminal 1: Replica A (Port 60401)
+python raft_node.py B         # Terminal 2: Replica B (Port 60402)
+python raft_node.py C         # Terminal 3: Replica C (Port 60403)
+python raft_client.py A       # Terminal 4: Test lock request & redirection
 ```
+
 
