@@ -9,6 +9,8 @@
 
 ## 🎯 About ChessMate
 
+> 🏛️ **Distributed Computing Lab (Sem 7)**: See [DC_EXPERIMENTS_README.md](DC_EXPERIMENTS_README.md) and the comprehensive [EXPERIMENTS_2_TO_11_README.md](EXPERIMENTS_2_TO_11_README.md) for full architectural writeups, diagrams, code, and top 60 viva questions covering Experiments 2 through 11 (gRPC, Lamport Clocks, Ricart-Agrawala Mutex, WFG Deadlocks, Least Connections Load Balancing, Gossip Replication & LWW, Redis Cache-Aside, Raft Consensus & Failover, Kubernetes Container Orchestration, and Distributed File System).
+
 ChessMate is a cutting-edge, full-stack chess platform that combines strategic gameplay with modern web technology. Built with React.js 19.1.1 and Node.js, it delivers an immersive chess experience featuring real-time multiplayer gameplay, intelligent AI opponents, and a sleek, responsive interface designed for chess enthusiasts of all skill levels.
 
 ### ✨ Key Features

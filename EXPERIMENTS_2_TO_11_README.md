@@ -1,9 +1,9 @@
-# 🏆 Distributed Computing (DC) Lab: Experiments 2 to 9 Comprehensive Guide
+# 🏆 Distributed Computing (DC) Lab: Experiments 2 to 11 Comprehensive Guide
 
 **Course**: Distributed Computing (Sem 7 - Computer Engineering)  
 **Faculty In-Charge**: Prof. Dhanashree Tamhane  
 **Mini-Project**: **ChessMate** (Distributed Multiplayer Chess Platform)  
-**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, Raft Consensus Leader Election & Failover, python-chess  
+**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, Raft Consensus Leader Election & Failover, Kubernetes Container Orchestration, Headless Services, python-chess  
 
 ---
 
@@ -17,14 +17,16 @@
 7. [Experiment 7: Eventual Consistency (Gossip Replication + Last-Write-Wins)](#-experiment-7-eventual-consistency)
 8. [Experiment 8: Redis Caching for Fault Tolerance (Cache-Aside Pattern)](#-experiment-8-redis-caching-for-fault-tolerance)
 9. [Experiment 9: Raft Leader Election & Failover for Uninterrupted Coordination](#-experiment-9-raft-leader-election--failover)
-10. [Master Viva Cheat-Sheet (Top 45 Questions & Answers)](#-master-viva-cheat-sheet-top-45-questions--answers)
-11. [Quick Command Reference Guide](#-quick-command-reference-guide)
+10. [Experiment 10: Deploy a Complete System on Kubernetes & Simulate Load](#-experiment-10-deploy-on-kubernetes--simulate-load)
+11. [Experiment 11: Distributed File System Storage (Chunking, Replication, Failover and Repair)](#11-experiment-11-distributed-file-system-chunking-replication-failover-and-repair)
+12. [Master Viva Cheat-Sheet (Top 60 Questions & Answers)](#-master-viva-cheat-sheet-top-60-questions--answers)
+13. [Quick Command Reference Guide](#-quick-command-reference-guide)
 
 ---
 
 ## 🏛️ Overview & Project Architecture
 
-In modern distributed systems, standalone monolithic architectures are replaced by decoupled microservices that communicate over the network. Throughout Experiments 2 to 9, we have implemented the complete distributed computing hierarchy for our **ChessMate** platform:
+In modern distributed systems, standalone monolithic architectures are replaced by decoupled microservices that communicate over the network. Throughout Experiments 2 to 10, we have implemented the complete distributed computing hierarchy for our **ChessMate** platform:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -38,6 +40,8 @@ In modern distributed systems, standalone monolithic architectures are replaced 
 │  [Exp 7] Eventual Consistency     : Gossip Replication + LWW (Lamport Clocks)│
 │  [Exp 8] Fault-Tolerant Caching   : Cache-Aside (Dual-Key Fresh/Stale Redis) │
 │  [Exp 9] Fault-Tolerant Consensus : Raft Leader Election & Failover (Quorum) │
+│  [Exp 10] Cloud Orchestration     : Kubernetes Headless Pool & Load Job     │
+│  [Exp 11] Distributed Storage     : Chunking, R=2 Replicas & Self-Healing   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,7 +62,7 @@ In modern distributed systems, standalone monolithic architectures are replaced 
 * **Guaranteed Rule Enforcement**: Moves are validated server-side using the international rules of chess (`chess.Board`), preventing client tampering.
 
 ### 4. How We Have Done It (Technical Architecture)
-1. **Defined the Interface Definition Language (IDL)** in [`proto/chess.proto`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/proto/chess.proto):
+1. **Defined the Interface Definition Language (IDL)** in [`proto/chess.proto`](proto/chess.proto):
    * `rpc CreateRoom (CreateRoomRequest) returns (CreateRoomResponse)`
    * `rpc MakeMove (MakeMoveRequest) returns (MakeMoveResponse)`
    * `rpc GetGameState (GetGameStateRequest) returns (GetGameStateResponse)`
@@ -67,11 +71,11 @@ In modern distributed systems, standalone monolithic architectures are replaced 
    python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/chess.proto
    ```
    Generates `chess_pb2.py` (message classes) and `chess_pb2_grpc.py` (client stubs & server servicer base classes).
-3. **Implemented Server** ([`chess_server.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/chess_server.py)):
+3. **Implemented Server** ([`chess_server.py`](chess_server.py)):
    * Inherits from `chess_pb2_grpc.ChessServiceServicer`.
    * Manages in-memory chess rooms, handles moves, tracks turns (White vs Black), detects check/checkmate using `python-chess`.
    * Listens on TCP port `50051`.
-4. **Implemented Client** ([`chess_client.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/chess_client.py)):
+4. **Implemented Client** ([`chess_client.py`](chess_client.py)):
    * Connects via `grpc.insecure_channel('localhost:50051')`.
    * Creates a room $\to$ plays White $e2 \to e4$ $\to$ plays Black $e7 \to e5$ $\to$ plays White $g1 \to f3$ $\to$ queries full game state.
 
@@ -132,16 +136,16 @@ In modern distributed systems, standalone monolithic architectures are replaced 
 * **Auditability & Traceability**: Provides a reliable logical timeline for distributed game logs and anti-cheat replay verification.
 
 ### 4. How We Have Done It (Technical Architecture)
-1. **Implemented Lamport Algorithm** in [`lamport_clock.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/lamport_clock.py):
+1. **Implemented Lamport Algorithm** in [`lamport_clock.py`](lamport_clock.py):
    * State variable: `self.time = 0`
    * **Rule 1 (Local / Send Event)**: Advance local clock by 1:
      $$L = L + 1$$
    * **Rule 2 (Receive Event)**: Upon message arrival with timestamp $L_{received}$, update:
      $$L = \max(L_{local}, L_{received}) + 1$$
-2. **Updated Proto Definition** in [`proto/lamport_chess.proto`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/proto/lamport_chess.proto):
+2. **Updated Proto Definition** in [`proto/lamport_chess.proto`](proto/lamport_chess.proto):
    * Every request message embeds `int64 lamport_time`.
    * Every response message embeds `int64 lamport_time`.
-3. **Synchronized Client & Server** ([`lamport_chess_client.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/lamport_chess_client.py) & [`lamport_chess_server.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/lamport_chess_server.py)):
+3. **Synchronized Client & Server** ([`lamport_chess_client.py`](lamport_chess_client.py) & [`lamport_chess_server.py`](lamport_chess_server.py)):
    * **Client send `CreateRoom`**: Clock advances $0 \to$ **`1`**.
    * **Server receive & respond**: Clock updates $\max(0, 1) + 1 =$ **`2`**. Client receives $\to$ Clock is **`2`**.
    * **Client send `MakeMove (e2->e4)`**: Clock advances $2 \to$ **`3`**.
@@ -206,10 +210,10 @@ Received Response  | Lamport Clock : 8 (Moves: ['e4', 'e5'])
 * **Tournament Slot Assignment / Leaderboard Broadcast**: Multiple decentralized tournament nodes compete to claim an exclusive **Tournament Championship Submission Slot**. Only one node can hold the slot at any instant.
 
 ### 4. How We Have Done It (Technical Architecture)
-1. **Defined Proto Service** in [`proto/artwork.proto`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/proto/artwork.proto) and [`proto/chess.proto`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/proto/chess.proto):
+1. **Defined Proto Service** in [`proto/artwork.proto`](proto/artwork.proto) and [`proto/chess.proto`](proto/chess.proto):
    * `service MutexService { rpc RequestAccess (AccessRequest) returns (AccessReply); }`
    * `AccessRequest { int32 node_id; int32 timestamp; }`
-2. **Three Node States** in [`node.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/node.py):
+2. **Three Node States** in [`node.py`](node.py):
    * `RELEASED`: Outside critical section (grants all incoming requests).
    * `WANTED`: Wants critical section; broadcasts requests to all peers.
    * `HELD`: Executing inside critical section (defers all incoming requests).
@@ -281,9 +285,9 @@ Open 3 separate terminals in the project root and launch within 6 seconds of eac
 * Without cycle detection, both services freeze permanently.
 
 ### 4. How We Have Done It (Technical Architecture)
-1. **Defined Proto Service** in [`proto/artwork.proto`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/proto/artwork.proto) and [`proto/chess.proto`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/proto/chess.proto):
+1. **Defined Proto Service** in [`proto/artwork.proto`](proto/artwork.proto) and [`proto/chess.proto`](proto/chess.proto):
    * `service LockService { rpc AcquireLock; rpc ReleaseLock; }`
-2. **Central LockManager** ([`lock_manager.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/lock_manager.py)):
+2. **Central LockManager** ([`lock_manager.py`](lock_manager.py)):
    * Tracks `self.locks = {resource_id: owner_id}` and `self.wait_for = {holder_id: resource_id}`.
    * Runs DFS cycle detection (`_would_cycle`):
      ```python
@@ -302,7 +306,7 @@ Open 3 separate terminals in the project root and launch within 6 seconds of eac
 3. **Deadlock Resolution Policy**:
    * If `DETECT == True` and `_would_cycle()` returns True, LockManager returns:
      `LockReply(granted=False, message="deadlock-abort")`.
-4. **Worker Recovery Strategy** ([`worker.py`](file:///c:/Users/Kamraam/Desktop/Sem%207/DC/ChessMate/worker.py)):
+4. **Worker Recovery Strategy** ([`worker.py`](worker.py)):
    * Catches `deadlock-abort`.
    * Immediately releases its held lock (breaking the *Hold and Wait* condition).
    * Backs off for 1.0 second (breaking the *Circular Wait*).
@@ -370,12 +374,12 @@ python run_exp5.py detect   # Run 2 only (Detection & Resolution)
 * **Distributed Chess Engine Worker Pool**: Chess move evaluation and Stockfish depth searches take drastically different times depending on board complexity (0.5s to 2.5s). A Least Connections load balancer ensures that heavy tactical positions do not monopolize a single engine worker while others remain underutilized.
 
 ### 4. How We Have Done It (Technical Architecture)
-1. **Defined Proto Contract** in [`proto/service.proto`](file:///d:/DC%20-%20ChessMate/proto/service.proto):
+1. **Defined Proto Contract** in [`proto/service.proto`](proto/service.proto):
    * `service WorkerService { rpc HandleRequest (WorkRequest) returns (WorkReply); }`
-2. **Backend Worker Server** ([`worker_server.py`](file:///d:/DC%20-%20ChessMate/worker_server.py)):
+2. **Backend Worker Server** ([`worker_server.py`](worker_server.py)):
    * Instantiates `WorkerServicer(name)` on ports `60201`, `60202`, `60203`.
    * Simulates variable-duration workloads using `time.sleep(random.uniform(0.5, 2.5))`.
-3. **Core Load Balancer Algorithm** ([`load_balancer.py`](file:///d:/DC%20-%20ChessMate/load_balancer.py)):
+3. **Core Load Balancer Algorithm** ([`load_balancer.py`](load_balancer.py)):
    * Tracks `active = [0, 0, 0]` protected by `threading.Lock()`.
    * **`pick_least_connections()`**:
      ```python
@@ -385,7 +389,7 @@ python run_exp5.py detect   # Run 2 only (Detection & Resolution)
          return idx
      ```
    * **`release(idx)`**: In a `finally:` block, decrements `active[idx]` so in-flight counters are always reclaimed even if an RPC fails.
-4. **Automated Multi-Process Orchestrator** ([`run_exp6.py`](file:///d:/DC%20-%20ChessMate/run_exp6.py)):
+4. **Automated Multi-Process Orchestrator** ([`run_exp6.py`](run_exp6.py)):
    * Concurrently launches 3 backend servers, verifies listener readiness, dispatches staggered requests, validates final counters return to `[0, 0, 0]`, and terminates workers.
 
 ### 5. How to Manually Run Experiment 6
@@ -438,11 +442,11 @@ python run_exp6.py
 * **Geo-Distributed Player Profiles & Active Match Metadata**: Players around the world connect to their nearest edge region (e.g. Region A: US-East, Region B: EU-Central, Region C: AP-South). Player bio updates, match room tags, and presence indicators are acknowledged instantaneously at the edge and gossiped asynchronously. Conflicting profile updates converge globally to the logically latest update without locking global databases.
 
 ### 4. How We Have Done It (Technical Architecture)
-1. **Defined Proto Contract** in [`proto/replica.proto`](file:///d:/DC%20-%20ChessMate/proto/replica.proto):
+1. **Defined Proto Contract** in [`proto/replica.proto`](proto/replica.proto):
    * `SaveValue (ValueUpdate) returns (SaveAck)` — Client to replica local write.
    * `SyncUpdate (ValueUpdate) returns (SaveAck)` — Replica to replica asynchronous gossip.
    * `GetValue (ValueQuery) returns (ValueState)` — Reads replica's local state.
-2. **Accept-then-Gossip Replica Node** ([`replica_node.py`](file:///d:/DC%20-%20ChessMate/replica_node.py)):
+2. **Accept-then-Gossip Replica Node** ([`replica_node.py`](replica_node.py)):
    * Replicas `A` (port 60301), `B` (port 60302), and `C` (port 60303).
    * **Accept-then-Gossip Pattern**: Applies write to local in-memory store immediately, responds to the client, and launches a background daemon thread to gossip the update to all peers.
    * **Last-Write-Wins (LWW) Logic**:
@@ -455,14 +459,14 @@ python run_exp6.py
          return False
      ```
    * **Lamport Clock Synchronization**: On send/write: `clock += 1`. On gossip receive: `clock = max(clock, received_ts) + 1`.
-3. **Concurrent Conflict Test Client** ([`replica_client.py`](file:///d:/DC%20-%20ChessMate/replica_client.py)):
+3. **Concurrent Conflict Test Client** ([`replica_client.py`](replica_client.py)):
    * Spawns two concurrent writer threads hitting different replicas for `shared-key-1` nearly simultaneously:
      - Writer 1 writes `"value-from-writer-1"` to Replica A.
      - Writer 2 writes `"value-from-writer-2"` to Replica C.
    * Reads immediately to demonstrate the **inconsistency window** (temporary disagreement).
    * Sleeps 2 seconds to allow gossip propagation.
    * Reads again to verify **eventual consistency convergence** on all replicas.
-4. **Automated Multi-Process Orchestrator** ([`run_exp7.py`](file:///d:/DC%20-%20ChessMate/run_exp7.py)):
+4. **Automated Multi-Process Orchestrator** ([`run_exp7.py`](run_exp7.py)):
    * Launches all 3 replicas, waits for sockets, runs the client test, captures replica APPLIED/IGNORED logs, and shuts down cleanly.
 
 ### 5. How to Manually Run Experiment 7
@@ -525,8 +529,8 @@ A **Cache-Aside Gateway** with dual-key resilience addresses both performance an
 
 ### 3. ChessMate System Integration
 In our **ChessMate** multiplayer platform:
-* The gRPC backend service is our existing [`server.py`](file:///d:/DC%20-%20ChessMate/server.py) (reusing [`chess_server.py`](file:///d:/DC%20-%20ChessMate/chess_server.py) from Experiment 2 on port 50051) with **zero modifications to backend business logic**.
-* The Cache Gateway ([`cache_gateway.py`](file:///d:/DC%20-%20ChessMate/cache_gateway.py)) intercepts client requests to inspect or fetch room/game status (`GetRoomState`).
+* The gRPC backend service is our existing [`server.py`](server.py) (reusing [`chess_server.py`](chess_server.py) from Experiment 2 on port 50051) with **zero modifications to backend business logic**.
+* The Cache Gateway ([`cache_gateway.py`](cache_gateway.py)) intercepts client requests to inspect or fetch room/game status (`GetRoomState`).
 * Frequently queried active rooms (such as spectated grandmaster games, tournament leaderboards, or live board positions) are served directly from Redis memory.
 * When the game server restarts or encounters transient network disconnects, spectators and active players continue viewing the latest known board state and move history from the stale cache rather than receiving connection dropped errors.
 
@@ -562,7 +566,7 @@ In our **ChessMate** multiplayer platform:
 1. **`fresh:item:{id}`** (Short TTL = 10s): Normal cache entry. Automatically expires after 10 seconds to ensure clients observe fresh data as games evolve.
 2. **`stale:item:{id}`** (No Expiry): Fallback-of-last-resort. Kept indefinitely and rewritten on every successful backend fetch. Never expires, ensuring that if the backend service crashes hours later, a valid fallback state is still retrievable.
 
-#### Request Resolution Flow (`get_item(item_id)` in [`cache_gateway.py`](file:///d:/DC%20-%20ChessMate/cache_gateway.py)):
+#### Request Resolution Flow (`get_item(item_id)` in [`cache_gateway.py`](cache_gateway.py)):
 1. **Try Cache First**:
    - Query Redis for `fresh:item:{item_id}` with a fail-fast timeout (`socket_connect_timeout=1`, `socket_timeout=1`).
    - If present: log `[Gateway] CACHE HIT` and return immediately (`cache-hit`).
@@ -833,7 +837,603 @@ Raft consensus leader election, failover, and gated coordination verified.
 
 ---
 
-## 🎯 Master Viva Cheat-Sheet: Top 45 Questions & Answers
+## 10. Experiment 10: Deploy a Complete System on Kubernetes & Simulate Load
+
+### 1. Aim
+To package the ChessMate distributed gRPC microservices into container images, deploy them as a self-healing multi-service cluster on Kubernetes, solve the HTTP/2 "gRPC single-connection load balancing trap" using Headless Services (`clusterIP: None`), demonstrate automatic pod failover and self-healing, and execute concurrent burst traffic simulation via in-cluster Kubernetes Jobs.
+
+### 2. Motivation & Why Kubernetes (vs Docker Compose)
+While Docker Compose starts and runs containers on a single host machine, **Kubernetes (K8s)** provides automated enterprise-grade production orchestration:
+* **Self-Healing & Auto-Restart**: If a container process crashes or a pod encounters a fatal error, Kubernetes detects the pod failure and automatically replaces it to restore the desired replica count.
+* **Declarative Scaling**: A stateless component (like our worker pool) can be scaled from 1 to 100 replicas by updating a single configuration number (`replicas: 3`).
+* **Service Discovery & Built-in DNS**: Every Service automatically receives an internal cluster DNS name (`service.namespace.svc.cluster.local`), eliminating hardcoded IP addresses.
+* **Failover Dynamics**: Deleting a pod in Kubernetes does not simulate a permanent outage because Kubernetes recreates it within seconds. Real failover testing requires scaling the Deployment to 0 (`--replicas=0`) and observing surviving nodes, then restoring (`--replicas=1`) to observe graceful rejoin.
+
+### 3. ChessMate System Integration
+In our **ChessMate** multiplayer platform:
+* The stateless worker pool ([`worker_server.py`](worker_server.py)) executes compute-heavy chess board evaluations, move validation, and AI calculations. In Kubernetes, it runs as a 3-replica Deployment.
+* The Raft consensus cluster (`raft-a`, `raft-b`, `raft-c`) manages distributed tournament locks and coordinates state across independent pods.
+* The Chess Game Server ([`chess_server.py`](chess_server.py)) manages active rooms on port 50051.
+* In-memory Redis runs via official `redis:7-alpine`, paired with the fault-tolerant Cache Gateway ([`cache_gateway.py`](cache_gateway.py)).
+* High-concurrency match simulations and tournament rush events are stress-tested using an in-cluster batch Job ([`load_test.py`](load_test.py)).
+
+### 4. Technical Architecture & Kubernetes Mechanics
+
+```
+                         Kubernetes Cluster Network
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                                                                        │
+ │   +----------------------------------------------------------------+   │
+ │   |                  Load Test Job (load_test.py)                  |   │
+ │   |            gRPC client with round_robin LB policy              |   │
+ │   +-------------------------------+--------------------------------+   │
+ │                                   |                                    │
+ │                       Resolves 'dns:///worker:60201'                   │
+ │                                   |                                    │
+ │                                   v                                    │
+ │   +----------------------------------------------------------------+   │
+ │   |         Headless Service 'worker' (clusterIP: None)            |   │
+ │   |            Returns SRV records for all healthy pod IPs         |   │
+ │   +---------------+---------------+----------------+---------------+   │
+ │                   |               |                |                   │
+ │                   v               v                v                   │
+ │            +--------------+ +--------------+ +--------------+          │
+ │            |  Worker-Pod  | |  Worker-Pod  | |  Worker-Pod  |          │
+ │            |  Replica 1   | |  Replica 2   | |  Replica 3   |          │
+ │            | (Port 60201) | | (Port 60201) | | (Port 60201) |          │
+ │            +--------------+ +--------------+ +--------------+          │
+ │                                                                        │
+ │   +----------------------------------------------------------------+   │
+ │   |  Raft Consensus Cluster: raft-a (60401) | raft-b | raft-c       |   │
+ │   |  Backend: chess-backend (50051) | Cache: redis (6379)          |   │
+ │   +----------------------------------------------------------------+   │
+ └────────────────────────────────────────────────────────────────────────┘
+```
+
+#### The Two Network Traps & Their Solutions
+1. **Trap 1: Localhost Bind Address**:
+   * *Problem*: If servers bind to `localhost:{port}`, the socket only accepts connections originating from inside the container itself.
+   * *Solution*: All servers bind to `0.0.0.0:{port}`, allowing ingress traffic from Kubernetes pod virtual networks.
+2. **Trap 2: Hardcoded Peer Addresses**:
+   * *Problem*: In pods, `localhost:PORT` points to the container itself, breaking peer-to-peer communication.
+   * *Solution*: [`net_config.py`](net_config.py) provides a dual-environment resolver. When `RUN_ENV="docker"` or `"k8s"`, service names resolve to cluster DNS (`worker:60201`, `raft-a:60401`). When `RUN_ENV="local"`, it falls back to `127.0.0.1`.
+
+#### The "gRPC Single-Connection Trap" & The 3-Part Solution
+* **The Problem**: Standard Kubernetes Services perform Layer-4 TCP load balancing. Because gRPC operates on HTTP/2 and reuses a single, long-lived multiplexed TCP connection per channel, a standard Kubernetes ClusterIP Service routes the entire TCP connection to **one single pod**. As a result, one pod handles 95–100% of all traffic while other replicas sit completely idle.
+* **The 3-Part Solution**:
+  1. **Headless Service (`clusterIP: None`)**: Declaring `spec.clusterIP: None` disables proxying; Kubernetes DNS returns an A/SRV record containing the individual IP addresses of all healthy pods.
+  2. **DNS Channel Prefix**: Connect using the `dns:///` URI schema: `dns:///worker:60201`.
+  3. **Client-Side Round Robin**: Instruct gRPC to rotate RPC streams across all discovered endpoints:
+     ```python
+     grpc.insecure_channel("dns:///worker:60201",
+         options=[("grpc.lb_policy_name", "round_robin")])
+     ```
+  * **Result**: Traffic splits evenly across all 3 replicas (e.g. 7, 7, 6 or 8, 7, 5).
+
+### 5. How to Run Experiment 10
+#### Option A: Automated Validator / Emulation Runner (Recommended)
+Validates all Kubernetes manifests and Dockerfiles, tests the environment resolver, deploys a 3-replica worker pool, fires a 20-request burst with client-side round robin, verifies balanced traffic distribution across replicas, and simulates pod crash & self-healing:
+```bash
+python run_exp10.py
+```
+
+#### Option B: Live Cluster Execution (Docker Desktop / Minikube / K3s)
+```bash
+# 1. Build the shared container image
+docker build -t myapp-backend:latest .
+
+# 2. Deploy all Deployments and Services
+kubectl apply -f k8s/app.yaml
+
+# 3. Verify all pods reach 'Running' with 0 restarts
+kubectl get pods
+
+# 4. Trigger concurrent burst traffic via Kubernetes Job
+kubectl apply -f k8s/load-test-job.yaml
+
+# 5. Wait for Job completion and view logs
+kubectl wait --for=condition=complete job/load-test --timeout=90s
+kubectl logs job/load-test
+
+# 6. Verify traffic is distributed across all 3 worker replicas
+for p in $(kubectl get pods -l app=worker -o name); do
+  echo $p; kubectl logs $p | grep -o "Handling request" | wc -l;
+done
+
+# 7. Test Kubernetes Failover & Self-Healing
+# Stop replacement to observe true failover:
+kubectl scale deployment worker --replicas=2
+# Restore replica pool:
+kubectl scale deployment worker --replicas=3
+
+# 8. Clean up cluster resources
+kubectl delete job load-test
+kubectl delete -f k8s/app.yaml
+```
+
+### 6. Expected Output
+```text
+===========================================================================
+DISTRIBUTED COMPUTING LAB - EXPERIMENT 10: KUBERNETES DEPLOYMENT & LOAD
+Containerized gRPC Microservices, Headless Services & Burst Simulation
+===========================================================================
+
+---------------------------------------------------------------------------
+STAGE 1: Validating Kubernetes Manifests & Docker Configuration
+---------------------------------------------------------------------------
+  [OK] Found Dockerfile (723 bytes)
+  [OK] Found k8s/app.yaml (5582 bytes)
+  [OK] Found k8s/load-test-job.yaml (521 bytes)
+  [OK] Found net_config.py (1221 bytes)
+  [OK] Validated Headless Service (clusterIP: None) for gRPC load balancing.
+  [OK] Validated 3-replica worker Deployment specification.
+  [OK] Validated imagePullPolicy: Never for local Docker Desktop images.
+
+---------------------------------------------------------------------------
+STAGE 2: Verifying Environment-Aware Host Resolver (net_config.py)
+---------------------------------------------------------------------------
+  [RUN_ENV=local]  worker -> 127.0.0.1:60201 | redis -> 127.0.0.1:6379
+  [RUN_ENV=docker] worker -> worker:60201 | redis -> redis:6379
+  [OK] Network resolver transparency verified for both local and pod environments.
+
+---------------------------------------------------------------------------
+STAGE 3: Deploying 3-Replica Worker Pool & Simulating gRPC Load Burst
+---------------------------------------------------------------------------
+  [Worker Replica] Online and listening on 127.0.0.1:60201
+  [Worker Replica] Online and listening on 127.0.0.1:60202
+  [Worker Replica] Online and listening on 127.0.0.1:60203
+
+[Headless DNS Emulation] Resolved 'worker:60201' -> ['127.0.0.1:60201', '127.0.0.1:60202', '127.0.0.1:60203']
+
+Firing burst of 20 requests across replicas (concurrency=5)...
+  [Req #04] Handled by Worker Pod :60201 in 0.284s
+  [Req #03] Handled by Worker Pod :60203 in 0.335s
+  [Req #05] Handled by Worker Pod :60202 in 0.467s
+  ...
+  [Req #20] Handled by Worker Pod :60202 in 0.666s
+
+===========================================================================
+BURST LOAD DISTRIBUTION RESULTS
+===========================================================================
+Total Requests: 20 | Successes: 20/20 (100%) | Time: 2.248s
+  Pod Worker :60201 ->  7 requests ( 35.0%) | ###########
+  Pod Worker :60202 ->  7 requests ( 35.0%) | ###########
+  Pod Worker :60203 ->  6 requests ( 30.0%) | ##########
+
+---------------------------------------------------------------------------
+STAGE 4: Simulating Kubernetes Pod Crash & Self-Healing Failover
+---------------------------------------------------------------------------
+[ACTION] Simulating pod crash: Killing Worker Pod on port 60202...
+[STATUS] Pod :60202 is DEAD. Surviving pods: [60201, 60203]
+
+[ACTION] Testing traffic continuity on surviving pods with 6 requests...
+  All 6 requests succeeded! Handled by survivors: Counter({'60201': 3, '60203': 3})
+
+[ACTION] Simulating Kubernetes Self-Healing: Replacing pod :60202...
+[STATUS] Pod :60202 RESTARTED by Kubernetes and rejoined healthy cluster pool.
+
+===========================================================================
+Experiment 10 execution completed successfully!
+Kubernetes manifests, headless gRPC load balancing, and self-healing verified.
+===========================================================================
+```
+
+### 7. Key Viva Questions for Experiment 10
+* **Q: What is the difference between Docker Compose and Kubernetes?**
+  * *A*: Docker Compose is a single-host tool that starts and stops containers. Kubernetes is a distributed cluster orchestrator providing self-healing pod restarts, auto-scaling, rolling updates, and declarative cluster management.
+* **Q: What is the "gRPC Trap" in Kubernetes load balancing?**
+  * *A*: Standard Kubernetes Services balance traffic at Layer 4 per TCP connection. Since gRPC uses long-lived HTTP/2 TCP streams, all requests reuse the initial connection and land on a single pod.
+* **Q: How does a Headless Service solve the gRPC load balancing trap?**
+  * *A*: Setting `clusterIP: None` tells Kubernetes DNS to return the IP addresses of all healthy pods instead of a single virtual IP. Combined with gRPC's `round_robin` policy, the client balances individual RPCs across all pod IPs.
+* **Q: Why does deleting a pod fail to properly test election failover in Kubernetes?**
+  * *A*: Kubernetes replaces deleted pods in milliseconds. The replacement pod starts up before other nodes can trigger their election timeouts, masking the failure. Scaling the Deployment to 0 (`--replicas=0`) prevents recreation and tests true failover.
+* **Q: Why must `imagePullPolicy: Never` be specified for local images in Docker Desktop?**
+  * *A*: Without `Never` (or `IfNotPresent`), Kubernetes attempts to pull the image from Docker Hub, failing with `ErrImagePull` for locally built tags.
+
+---
+
+---
+
+## 11. Experiment 11: Distributed File System (Chunking, Replication, Failover and Repair)
+
+### 1. Aim
+To design, implement, and validate a resilient, fault-tolerant Distributed File System (DFS) inspired by Google File System (GFS) and Apache Hadoop HDFS, featuring:
+* **Fixed-size Block Chunking**: Splitting files into uniform 64 KB chunk blocks.
+* **Multi-Replica Durability**: Replicating every chunk across independent storage nodes with a replication factor $R = 2$.
+* **Decoupled Architecture**: Separating lightweight metadata management (file registry, chunk maps, versions, heartbeats) from raw chunk storage.
+* **Lamport Logical Versioning**: Monotonically advancing file version numbers via Lamport logical clocks to preserve strict causal update ordering.
+* **Autonomous Heartbeat Failure Detection**: Detecting dead storage nodes when heartbeat intervals exceed 6.0 seconds.
+* **Cryptographic Integrity & Failover**: Verifying SHA-256 digests on write and read, automatically skipping offline or corrupted replicas to read clean copies.
+* **Dynamic Self-Healing Repair**: Automatically discovering under-replicated chunks and re-replicating them onto surviving live nodes.
+
+### 2. Motivation & Why Distributed Storage (vs Monolithic Drives)
+In centralized systems, storing files on a single physical server disk introduces severe vulnerabilities:
+* **Catastrophic Hardware Loss**: If a drive fails mechanically, or a filesystem sector corrupts, all hosted files are permanently lost.
+* **I/O Bottleneck**: Single storage heads cannot service hundreds of concurrent streaming reads or large writes simultaneously.
+* **Storage Capacity Ceiling**: A single machine cannot scale beyond physical motherboard and drive bay limits.
+
+**The GFS/HDFS Architectural Paradigm**:
+1. **Separation of Control Plane from Data Plane**:
+   * **Metadata Server** tracks which file contains which chunks, chunk locations, checksums, and storage node health. Because metadata is small (a few bytes per chunk), it resides entirely in memory for sub-millisecond lookups.
+   * **Storage Nodes** are simple 'dumb' servers that store chunks on local disks. They never parse file structures.
+   * **No Metadata I/O Bottleneck**: Clients query the metadata server only once to obtain the chunk layout plan, and then stream chunk bytes directly to and from storage nodes in parallel.
+2. **Chunking & Multi-Node Replication**:
+   * Files are divided into fixed chunks ($64\text{ KB}$ for lab demo, $64\text{ MB}$ in GFS/HDFS).
+   * Each chunk is placed on multiple distinct storage nodes ($R \ge 2$). If any single drive or node dies, the chunk remains fully readable from its surviving replica.
+3. **End-to-End Cryptographic Checksumming**:
+   * Storage disks can suffer silent data corruption (bit rot, bad sectors). By associating each chunk with an immutable SHA-256 hash, the client detects corrupt bytes upon read, abandons the tainted replica, and transparently pulls the valid chunk from an alternate replica.
+
+### 3. ChessMate System Integration
+In the **ChessMate** distributed platform:
+* **Tournament PGN Archives & Match Replays**: Every grandmaster game produces extensive Portable Game Notation (PGN) transcripts, engine evaluations, and binary move logs. These files are chunked, distributed across storage nodes, and streamed to spectators.
+* **Endgame Tablebases & Opening Books**: Heavy Opening Tree books (PolyGlot `.bin` format) and Stockfish endgame tablebases (Syzygy `.rtbw`/`.rtbz` files) require multi-megabyte distributed persistence across the engine worker pool.
+* **High Availability & Durability**: Even if a storage node suffers an unrecoverable failure during a live tournament broadcast, viewers continue replaying moves seamlessly through replica failover, while the automated repair service re-replicates lost chunks to restore the target redundancy factor.
+
+### 4. Technical Architecture & Component Interaction
+
+```
+                              ChessMate DFS Architecture
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                        │
+│                               +-----------------------+                                │
+│                               |    Metadata Server    |                                │
+│                               |   (dfs_metadata.py)   |                                │
+│                               |      Port 60501       |                                │
+│                               +-----------+-----------+                                │
+│                                           │                                            │
+│            ┌──────────────────────────────┼──────────────────────────────┐             │
+│            │ (Heartbeats every 2s)        │ (Heartbeats every 2s)        │             │
+│            ▼                              ▼                              ▼             │
+│   +------------------+           +------------------+           +------------------+   │
+│   |  Storage Node 1  |           |  Storage Node 2  |           |  Storage Node 3  |   │
+│   | (dfs_storage.py) |           | (dfs_storage.py) |           | (dfs_storage.py) |   │
+│   |    Port 60511    |           |    Port 60512    |           |    Port 60513    |   │
+│   | dfs_data/store-1 |           | dfs_data/store-2 |           | dfs_data/store-3 |   │
+│   +--------+---------+           +--------+---------+           +--------+---------+   │
+│            ▲                              ▲                              ▲             │
+│            │                              │                              │             │
+│            │            Direct Chunk Bytes (gRPC PutChunk/GetChunk)      │             │
+│            └──────────────────────────────┼──────────────────────────────┘             │
+│                                           │                                            │
+│                     ┌─────────────────────┴─────────────────────┐                      │
+│                     │                                           │                      │
+│           +---------+---------+                       +---------+---------+            │
+│           |  DFS Client (CLI) |                       |   Repair Engine   |            │
+│           |  (dfs_client.py)  |                       |  (dfs_repair.py)  |            │
+│           +-------------------+                       +-------------------+            │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Core Components:
+1. **Metadata Server (`dfs_metadata.py`, Port 60501)**:
+   * **In-Memory Catalog & Disk Persistence**: Manages the file dictionary mapping `filename -> {version, size, sha256, chunks}` and persists snapshots to `dfs_data/metadata.json` using atomic temporary file renaming (`.tmp` -> `.json`).
+   * **Lamport Logical Clock**: Maintains a Lamport timestamp ($L$). On client requests (`AllocateFile`, `CommitFile`), it updates $L = \max(L, L_{req}) + 1$, ticks before allocating, and stamps file versions.
+   * **Least-Loaded Chunk Placement**: Queries chunk counts per live node and assigns new replicas to the nodes holding the fewest chunks ($R = \min(2, \text{len}(live))$).
+   * **Liveness Heartbeat Monitor**: Tracks `last_seen[node_id]`. If `time.time() - last_seen > 6.0\text{s}`, marks the node `DOWN`. A background monitoring thread detects state transitions and logs `Node store-X is DOWN (no heartbeat)` or `BACK UP`.
+2. **Storage Nodes (`dfs_storage.py`, Ports 60511, 60512, 60513)**:
+   * **Local Chunk Directory**: Stores chunks as isolated binary files under `dfs_data/store-{num}/{chunk_id}`.
+   * **Atomic Writes**: Receives chunk bytes, verifies `sha256(data) == request.sha256`, writes to `.tmp`, and calls `os.replace` to eliminate partial-write corruptions.
+   * **Heartbeat Thread**: Sends a `Heartbeat(node_id, address)` RPC every 2.0 seconds to `dfs-meta`.
+3. **Client Application (`dfs_client.py`)**:
+   * **Chunking Pipeline**: Reads target file, splits into $64\text{ KB}$ byte slices, and calculates whole-file and per-chunk SHA-256 digests.
+   * **Allocation & Parallel Push**: Obtains placement plan from metadata server, pushes each chunk directly to all designated replica nodes, and commits metadata once verified.
+   * **Fault-Tolerant Download**: Queries metadata server (which prioritizes live replicas), attempts reading each chunk in order. If a storage node is unreachable (`UNAVAILABLE`) or returns data with a mismatched checksum (`CORRUPT data`), it automatically falls back to the next replica.
+4. **Self-Healing Repair Engine (`dfs_repair.py`)**:
+   * Inspects `ClusterStatus` across all registered files.
+   * For every chunk with fewer live replicas than `REPLICATION_FACTOR` ($2$), reads a pristine copy from a surviving live holder, transfers it to a healthy live node lacking that chunk, and commits the new location via `AddReplica`.
+
+---
+
+### 5. Data Flow Diagrams & Step-by-Step Mechanisms
+
+#### A. Write Path (File Upload)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as DFS Client
+    participant Meta as Metadata Server
+    participant Store1 as Storage Node 1
+    participant Store2 as Storage Node 2
+
+    Note over Client: Split file into 64 KB chunks
+    Client->>Meta: AllocateFile(filename, num_chunks, client_lamport_ts)
+    Note over Meta: Lamport Clock Update & Tick<br/>Select least loaded live nodes
+    Meta-->>Client: AllocateReply(version, plan: [c0->store-1,store-2,...])
+    
+    loop For each chunk
+        Client->>Store1: PutChunk(chunk_id, data, sha256)
+        Store1-->>Client: Ack(ok=True, "stored")
+        Client->>Store2: PutChunk(chunk_id, data, sha256)
+        Store2-->>Client: Ack(ok=True, "stored")
+    end
+
+    Client->>Meta: CommitFile(filename, version, size, sha256, chunks)
+    Note over Meta: Persist to dfs_data/metadata.json
+    Meta-->>Client: CommitReply(ok=True, lamport_ts)
+    Note over Client: Advance local Lamport clock
+```
+
+#### B. Read Path with Node Failure & Corrupt Chunk Failover
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as DFS Client
+    participant Meta as Metadata Server
+    participant DeadStore as Store 2 (DEAD)
+    participant LiveStore as Store 3 (LIVE)
+
+    Client->>Meta: GetFileInfo(filename)
+    Meta-->>Client: FileInfo(version, size, sha256, chunks: [live replicas first])
+
+    Note over Client: Attempt Chunk 2 from primary replica
+    Client->>DeadStore: GetChunk(chunk_id)
+    DeadStore--xClient: gRPC UNAVAILABLE (Connection Refused)
+    Note over Client: Catch RpcError -> Fail over to next replica!
+    Client->>LiveStore: GetChunk(chunk_id)
+    LiveStore-->>Client: ChunkData(data, sha256)
+    Note over Client: Verify sha256(data) == chunk.sha256<br/>Verify whole-file SHA-256 on assembly
+```
+
+#### C. Self-Healing Repair Workflow
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Repair as dfs_repair.py
+    participant Meta as Metadata Server
+    participant Survivor as Store 1 (Surviving Replica)
+    participant Target as Store 3 (Healthy Live Node)
+
+    Repair->>Meta: ClusterStatus()
+    Meta-->>Repair: Status(nodes, files, chunk replica status)
+    Note over Repair: Detect Chunk 0 has only 1 live copy (store-2 is DOWN)
+    Repair->>Survivor: GetChunk(chunk_id)
+    Survivor-->>Repair: ChunkData(pristine bytes)
+    Repair->>Target: PutChunk(chunk_id, data, sha256)
+    Target-->>Repair: Ack(ok=True)
+    Repair->>Meta: AddReplica(filename, chunk_index, target_node)
+    Note over Meta: Update metadata & save to disk
+    Meta-->>Repair: Ack(ok=True)
+    Note over Repair: Replication factor restored to R=2!
+```
+
+---
+
+### 6. Detailed Step-by-Step Walkthrough
+
+```bash
+# ----------------------------------------------------------------------
+# Terminal 1: Metadata Server
+# ----------------------------------------------------------------------
+python dfs_metadata.py
+
+# ----------------------------------------------------------------------
+# Terminals 2, 3, 4: Storage Nodes (3 Replicas)
+# ----------------------------------------------------------------------
+python dfs_storage.py 1  # Terminal 2
+python dfs_storage.py 2  # Terminal 3
+python dfs_storage.py 3  # Terminal 4
+
+# ----------------------------------------------------------------------
+# Terminal 5: Client Verification & Chaos Testing
+# ----------------------------------------------------------------------
+# 1. Create a 300,000 byte binary test file (splits into 5 chunks of 64 KB)
+python -c "import os; open('photo.bin', 'wb').write(os.urandom(300000))"
+
+# 2. Check cluster status & upload
+python dfs_client.py status
+python dfs_client.py put photo.bin
+python dfs_client.py status
+
+# 3. Download and verify integrity
+python dfs_client.py get photo.bin out1.bin
+python -c "import hashlib; assert hashlib.sha256(open('photo.bin','rb').read()).hexdigest() == hashlib.sha256(open('out1.bin','rb').read()).hexdigest(); print('Files are identical!')"
+
+# 4. TEST 1: Kill a node (Stop storage node 2 with Ctrl+C) and read anyway
+python dfs_client.py get photo.bin out2.bin
+
+# 5. TEST 2: Watch cluster notice node failure (Wait 8 seconds)
+python dfs_client.py status
+# (Metadata logs: 'Node store-2 is DOWN (no heartbeat)')
+
+# 6. TEST 3: Run autonomous repair
+python dfs_repair.py
+python dfs_client.py status
+python dfs_client.py get photo.bin out3.bin
+
+# 7. TEST 4: Corrupt a stored chunk on disk
+python -c "import os, glob; f = glob.glob('dfs_data/store-1/photo.bin*.c0')[0]; open(f, 'wb').write(b'CORRUPTED_DATA')"
+python dfs_client.py get photo.bin out4.bin
+# (Client detects 'CORRUPT data, trying next replica' and successfully reads clean replica!)
+
+# 8. TEST 5: Bring node back (Restart storage node 2)
+python dfs_storage.py 2
+# (Metadata logs: 'Node store-2 is BACK UP')
+
+# 9. TEST 6: Upload a second file and verify Lamport versioning & least-loaded placement
+python -c "import os; open('second.bin', 'wb').write(os.urandom(70000))"
+python dfs_client.py put second.bin
+python dfs_client.py status
+```
+
+---
+
+### 7. Expected Output
+
+```text
+======================================================================
+  EXPERIMENT 11: DISTRIBUTED FILE SYSTEM (CHUNK, REPLICATE, REPAIR)   
+======================================================================
+
+[Step 1] Starting DFS Metadata Server and 3 Storage Nodes...
+Waiting for storage nodes to send initial heartbeats (3 seconds)...
+[OK] Metadata Server alive. Registered live storage nodes: ['store-1', 'store-2', 'store-3']
+
+[Step 2] Generating test file 'photo.bin' (300,000 bytes) and uploading...
+Original photo.bin SHA-256: d503903e3561e0802d2278b864d02bcedeafc20864dfcc0ba7f38f69942d73f5
+Allocated 'photo.bin' as version 3: 300000 bytes in 5 chunk(s)
+  chunk 0: stored on store-1, store-2
+  chunk 1: stored on store-3, store-1
+  chunk 2: stored on store-2, store-3
+  chunk 3: stored on store-1, store-2
+  chunk 4: stored on store-3, store-1
+Committed 'photo.bin' v3. Whole-file checksum d503903e3561e080...
+
+[Step 2b] Downloading 'photo.bin' to 'out1.bin' and verifying integrity...
+Reading 'photo.bin' v3: 300000 bytes in 5 chunk(s)
+  chunk 0: read from store-1
+  chunk 1: read from store-3
+  chunk 2: read from store-2
+  chunk 3: read from store-1
+  chunk 4: read from store-3
+OK: wrote 300000 bytes to out1.bin, checksum verified.
+[OK] Download out1.bin matches original file exactly! (SHA-256: d503903e3561e080...)
+
+Cluster Status after initial upload:
+Storage nodes:
+  store-1  UP   127.0.0.1:60511  chunks held: 4
+  store-2  UP   127.0.0.1:60512  chunks held: 3
+  store-3  UP   127.0.0.1:60513  chunks held: 3
+Files:
+  photo.bin  v3  300000 bytes  5 chunk(s)
+    chunk 0: store-1, store-2
+    chunk 1: store-3, store-1
+    chunk 2: store-2, store-3
+    chunk 3: store-1, store-2
+    chunk 4: store-3, store-1
+
+[Step 3 - Test 1] Killing storage node 2 (store-2) and immediately reading 'out2.bin'...
+Terminated store-2 process.
+Reading 'photo.bin' v3: 300000 bytes in 5 chunk(s)
+  chunk 0: read from store-1
+  chunk 1: read from store-3
+  chunk 2: store-2 unavailable (UNAVAILABLE), trying next replica
+  chunk 2: read from store-3
+  chunk 3: read from store-1
+  chunk 4: read from store-3
+OK: wrote 300000 bytes to out2.bin, checksum verified.
+[OK] Test 1 Passed: Read succeeded seamlessly via replica failover while store-2 was dead!
+
+[Step 4 - Test 2] Waiting 7 seconds for heartbeat timeout (>6.0s)...
+Storage nodes:
+  store-1  UP   127.0.0.1:60511  chunks held: 4
+  store-2  DOWN  127.0.0.1:60512  chunks held: 3
+  store-3  UP   127.0.0.1:60513  chunks held: 3
+Files:
+  photo.bin  v3  300000 bytes  5 chunk(s)
+    chunk 0: store-1, store-2 (down)
+    chunk 1: store-3, store-1
+    chunk 2: store-3, store-2 (down)
+    chunk 3: store-1, store-2 (down)
+    chunk 4: store-3, store-1
+[OK] Test 2 Passed: Metadata server correctly detected store-2 failure!
+
+[Step 5 - Test 3] Running dfs_repair.py to re-replicate missing chunks...
+Live nodes: store-1, store-3
+  photo.bin chunk 0: copied to store-3
+  photo.bin chunk 2: copied to store-1
+  photo.bin chunk 3: copied to store-3
+Repair finished: 3 chunk copy(ies) made, 0 problem(s).
+
+Cluster Status after repair:
+Storage nodes:
+  store-1  UP   127.0.0.1:60511  chunks held: 5
+  store-2  DOWN  127.0.0.1:60512  chunks held: 3
+  store-3  UP   127.0.0.1:60513  chunks held: 5
+Files:
+  photo.bin  v3  300000 bytes  5 chunk(s)
+    chunk 0: store-1, store-3, store-2 (down)
+    chunk 1: store-3, store-1
+    chunk 2: store-3, store-1, store-2 (down)
+    chunk 3: store-1, store-3, store-2 (down)
+    chunk 4: store-3, store-1
+Reading 'photo.bin' v3: 300000 bytes in 5 chunk(s)
+  chunk 0: read from store-1
+  chunk 1: read from store-3
+  chunk 2: read from store-3
+  chunk 3: read from store-1
+  chunk 4: read from store-3
+OK: wrote 300000 bytes to out3.bin, checksum verified.
+[OK] Test 3 Passed: Repair restored replication factor R=2 onto surviving nodes!
+
+[Step 6 - Test 4] Simulating on-disk chunk corruption on store-1...
+Corrupting file: dfs_data\store-1\photo.bin.v3.c0
+Downloading 'photo.bin' to 'out4.bin' (client should detect corrupt data & fall back)...
+Reading 'photo.bin' v3: 300000 bytes in 5 chunk(s)
+  chunk 0: store-1 returned CORRUPT data, trying next replica
+  chunk 0: read from store-3
+  chunk 1: read from store-3
+  chunk 2: read from store-3
+  chunk 3: read from store-1
+  chunk 4: read from store-3
+OK: wrote 300000 bytes to out4.bin, checksum verified.
+[OK] Test 4 Passed: Client detected corrupted chunk checksum and retrieved clean replica!
+
+[Step 7 - Test 5] Restarting storage node 2 (dfs_storage.py 2)...
+Waiting 3 seconds for store-2 heartbeat...
+Storage nodes:
+  store-1  UP   127.0.0.1:60511  chunks held: 5
+  store-2  UP   127.0.0.1:60512  chunks held: 3
+  store-3  UP   127.0.0.1:60513  chunks held: 5
+Files:
+  photo.bin  v3  300000 bytes  5 chunk(s)
+    chunk 0: store-1, store-2, store-3
+    chunk 1: store-3, store-1
+    chunk 2: store-2, store-3, store-1
+    chunk 3: store-1, store-2, store-3
+    chunk 4: store-3, store-1
+[OK] Test 5 Passed: store-2 successfully rejoined the cluster with data intact!
+
+[Step 8 - Test 6] Uploading second file 'second.bin' (70,000 bytes)...
+Allocated 'second.bin' as version 8: 70000 bytes in 2 chunk(s)
+  chunk 0: stored on store-2, store-1
+  chunk 1: stored on store-2, store-3
+Committed 'second.bin' v8. Whole-file checksum ca20aeadcbd983b8...
+
+Final Cluster Status:
+Storage nodes:
+  store-1  UP   127.0.0.1:60511  chunks held: 6
+  store-2  UP   127.0.0.1:60512  chunks held: 5
+  store-3  UP   127.0.0.1:60513  chunks held: 6
+Files:
+  photo.bin  v3  300000 bytes  5 chunk(s)
+    chunk 0: store-1, store-2, store-3
+    chunk 1: store-3, store-1
+    chunk 2: store-2, store-3, store-1
+    chunk 3: store-1, store-2, store-3
+    chunk 4: store-3, store-1
+  second.bin  v8  70000 bytes  2 chunk(s)
+    chunk 0: store-2, store-1
+    chunk 1: store-2, store-3
+[OK] Test 6 Passed: second.bin successfully uploaded with monotonic Lamport version!
+
+======================================================================
+  ALL EXPERIMENT 11 TESTS PASSED SUCCESSFULLY!                        
+======================================================================
+```
+
+### 8. Key Viva Questions for Experiment 11
+* **Q: Why does DFS separate metadata from raw chunk storage?**
+  * *A*: Metadata is small and changes frequently; keeping it on a dedicated metadata server allows fast in-memory indexing. File chunk data is large and mostly write-once; streaming chunk bytes directly between clients and storage nodes prevents the metadata server from becoming an I/O bottleneck.
+* **Q: What is chunking, and why use a uniform chunk size?**
+  * *A*: Chunking divides large files into uniform fixed blocks. Uniformity simplifies space management on storage disks (no external fragmentation), enables fine-grained parallel transfers, and allows independent replication across different nodes.
+* **Q: How does the metadata server balance chunk distribution?**
+  * *A*: In `AllocateFile`, the metadata server calculates current chunk counts across all live nodes and assigns new chunk replicas to the least-loaded nodes, ensuring disk utilization remains balanced.
+* **Q: How does the heartbeat failure detection mechanism work?**
+  * *A*: Storage nodes send heartbeats every 2 seconds. The metadata server records the timestamp of the last heartbeat. If no heartbeat is received from a node for 6 seconds (`HEARTBEAT_TIMEOUT`), the node is marked `DOWN` and excluded from allocation plans.
+* **Q: How does the client handle a dead storage node during download?**
+  * *A*: In `get()`, the metadata server returns all replica addresses for each chunk. The client iterates through replicas in order. If a connection fails (`UNAVAILABLE`), it catches the `RpcError` and immediately tries the next healthy replica.
+* **Q: How does the system detect and recover from silent disk corruption (bit rot)?**
+  * *A*: Each chunk has an associated SHA-256 digest recorded at commit time. On read, the client hashes the received bytes. If the digest doesn't match, it flags `CORRUPT data`, discards the bad chunk, and pulls the authentic replica from another node.
+* **Q: How does `dfs_repair.py` restore the replication factor?**
+  * *A*: It queries `ClusterStatus`, finds chunks with fewer than 2 live replicas, fetches a healthy copy from an active holder, copies it to an active node not yet holding it, and registers the replica with `AddReplica`.
+* **Q: Why are file versions assigned using Lamport logical clocks instead of simple integer counters?**
+  * *A*: Lamport clocks capture causal dependencies across distributed clients. A client includes its local timestamp in allocation requests; the server updates its clock ($\max(clock, ts) + 1$), ensuring that version numbers reflect true causal event ordering across independent writers.
+* **Q: What happens when a dead storage node comes back online (rejoin)?**
+  * *A*: The node resumes sending heartbeats, and the metadata server marks it `BACK UP`. Because chunks were persisted to disk, the node's existing chunks are immediately accessible again, automatically raising replica redundancy.
+* **Q: What are the primary single points of failure (SPOF) in this DFS, and how would production systems fix them?**
+  * *A*: The metadata server is a single point of failure. Production systems (like GFS Master or HDFS NameNode) replicate metadata state across a small Raft or Paxos consensus group (similar to Experiment 9) with automatic leader failover.
+
+## 🎯 Master Viva Cheat-Sheet: Top 60 Questions & Answers
 
 | # | Question | Concise Answer for Viva |
 |:---:|:---|:---|
@@ -882,6 +1482,21 @@ Raft consensus leader election, failover, and gated coordination verified.
 | **43** | Why are election timeouts randomized in Raft? | To break symmetry and prevent split votes where multiple candidates divide the vote and deadlock. |
 | **44** | How does Raft prevent Split-Brain? | By requiring a strict majority quorum ($N//2 + 1$) to elect a leader; two partitions cannot both achieve majority. |
 | **45** | What is Gated Coordination in Raft? | Restricting centralized operations (like granting locks) strictly to the elected leader; followers refuse and redirect clients. |
+| **46** | Why Kubernetes instead of Docker Compose? | Compose only starts containers; Kubernetes monitors, auto-restarts failed pods (self-healing), and scales replicas dynamically. |
+| **47** | What is the "gRPC Trap" in Kubernetes load balancing? | Standard K8s Services balance per TCP connection; gRPC's persistent HTTP/2 connection pins all traffic to one pod. |
+| **48** | What is a Headless Service and why is it needed for gRPC? | A Service with `clusterIP: None` returning all pod IPs via DNS, allowing gRPC client-side round-robin balancing across all replicas. |
+| **49** | Why does deleting a pod fail to test election failover in Kubernetes? | Kubernetes replaces the pod within seconds before election timeouts elapse; scaling `--replicas=0` is required for true failover testing. |
+| **50** | Why set `imagePullPolicy: Never` for local images in Docker Desktop? | Prevents Kubernetes from trying to pull locally built images from Docker Hub, which would fail with `ErrImagePull`. |
+| **51** | Why separate metadata from raw data in DFS? | Metadata is small and heavily mutated, fitting in RAM for fast lookups; routing large data streams directly between clients and storage nodes avoids I/O bottlenecks. |
+| **52** | What is chunking and why use fixed sizes? | Dividing files into uniform blocks (e.g. 64 KB or 64 MB); eliminates disk fragmentation, simplifies chunk placement, and enables parallel streaming. |
+| **53** | How does the metadata server balance storage node load? | By sorting live nodes by their active chunk counts and assigning new chunk replicas to the least loaded nodes. |
+| **54** | How does failure detection work in DFS? | Storage nodes emit heartbeats every 2s; if the metadata server detects no heartbeat for >6s, it marks the node DOWN and reorders replicas. |
+| **55** | How does client failover work during chunk downloads? | The metadata server returns all replica addresses (live nodes first); if the primary replica is unreachable, the client catches RpcError and tries the next replica. |
+| **56** | How does DFS prevent silent disk corruption (bit rot)? | Calculates a SHA-256 hash on write; on read, validates received bytes against the hash. If mismatched, rejects corrupt data and fetches an alternate replica. |
+| **57** | How does `dfs_repair.py` heal the cluster? | Discovers under-replicated chunks (live replicas < 2), reads a healthy copy from a survivor, writes it to another live node, and calls `AddReplica`. |
+| **58** | Why use Lamport logical clocks for DFS file versions? | Captures causal relationships between independent client modifications without relying on unsynchronized physical wall clocks. |
+| **59** | What happens when a dead storage node restarts (rejoins)? | It resumes emitting heartbeats, marks BACK UP, and because chunk files are kept on local disk, its replicas immediately restore cluster redundancy. |
+| **60** | What is the primary single point of failure (SPOF) in DFS? | The centralized metadata server; in production (like GFS/HDFS), it is protected via a Raft/Paxos consensus cluster with automated leader failover. |
 
 ---
 
@@ -902,6 +1517,7 @@ python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/ar
 python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/service.proto
 python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/replica.proto
 python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/raft.proto
+python -m grpc_tools.protoc -I=proto --python_out=. --grpc_python_out=. proto/dfs.proto
 
 # -------------------------------------------------------------
 # 3. EXPERIMENT 2: gRPC RPC COMMUNICATION
@@ -975,6 +1591,31 @@ python raft_node.py A         # Terminal 1: Replica A (Port 60401)
 python raft_node.py B         # Terminal 2: Replica B (Port 60402)
 python raft_node.py C         # Terminal 3: Replica C (Port 60403)
 python raft_client.py A       # Terminal 4: Test lock request & redirection
+
+# -------------------------------------------------------------
+# 11. EXPERIMENT 10: KUBERNETES DEPLOYMENT & LOAD TEST
+# -------------------------------------------------------------
+python run_exp10.py            # Automated Simulator & Validator (All 4 Stages)
+# OR Live Kubernetes Cluster:
+docker build -t myapp-backend:latest .
+kubectl apply -f k8s/app.yaml
+kubectl apply -f k8s/load-test-job.yaml
+kubectl logs job/load-test
+
+# -------------------------------------------------------------
+# 12. EXPERIMENT 11: DISTRIBUTED FILE SYSTEM (CHUNK, REPLICATE, REPAIR)
+# -------------------------------------------------------------
+python run_exp11.py             # Automated (Spawns Meta, 3 Stores & Runs 6 Tests)
+# OR Manual 5 Terminals:
+python dfs_metadata.py          # Terminal 1: Metadata Server (Port 60501)
+python dfs_storage.py 1         # Terminal 2: Storage Node 1 (Port 60511)
+python dfs_storage.py 2         # Terminal 3: Storage Node 2 (Port 60512)
+python dfs_storage.py 3         # Terminal 4: Storage Node 3 (Port 60513)
+python dfs_client.py put <file> # Terminal 5: Upload file
+python dfs_client.py get <f> <o># Terminal 5: Download file
+python dfs_client.py status     # Terminal 5: Cluster topology
+python dfs_repair.py            # Terminal 5: Re-replicate lost chunks
 ```
+
 
 

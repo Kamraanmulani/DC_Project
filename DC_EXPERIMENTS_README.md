@@ -1,11 +1,11 @@
-# ♟️ Distributed Computing (DC) Lab Experiments (2, 3, 4, 5, 6, 7, 8 & 9): ChessMate
+# ♟️ Distributed Computing (DC) Lab Experiments (2, 3, 4, 5, 6, 7, 8, 9, 10 & 11): ChessMate
 
 **Subject**: Distributed Computing (Sem 7)  
 **Faculty**: Prof. Dhanashree Tamhane  
 **Project**: **ChessMate** (Distributed Multiplayer Chess Platform)  
-**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, Raft Consensus Leader Election & Failover, python-chess  
+**Technology Stack**: Python 3.10, gRPC, Protocol Buffers (proto3), Lamport Logical Clocks, Ricart-Agrawala Mutual Exclusion, Wait-For Graph Deadlock Detection, Least Connections Load Balancing, Gossip Replication & Last-Write-Wins (LWW), Redis Cache-Aside Fault Tolerance, Raft Consensus Leader Election & Failover, Kubernetes Container Orchestration, Headless Services, Distributed File System (DFS), Chunking & Replication, python-chess  
 
-> 📖 **Comprehensive In-Depth Guide & Viva Q&A**: See [EXPERIMENTS_2_TO_9_README.md](EXPERIMENTS_2_TO_9_README.md) for full architectural breakdowns, mathematical proofs, diagrams, and top 45 viva questions.
+> 📖 **Comprehensive In-Depth Guide & Viva Q&A**: See [EXPERIMENTS_2_TO_11_README.md](EXPERIMENTS_2_TO_11_README.md) for full architectural breakdowns, mathematical proofs, diagrams, and top 60 viva questions.
 
 ---
 
@@ -21,6 +21,8 @@
 | **7** | **Eventual Consistency (Gossip + LWW)** | Accept-then-gossip asynchronous replication, deterministic Last-Write-Wins via `(lamport_timestamp, origin_replica)` | [`proto/replica.proto`](proto/replica.proto), [`replica_node.py`](replica_node.py), [`replica_client.py`](replica_client.py), [`run_exp7.py`](run_exp7.py) |
 | **8** | **Redis Caching & Fault Tolerance** | Cache-Aside pattern, dual-key fresh short-TTL + stale fallback, graceful degradation | [`cache_gateway.py`](cache_gateway.py), [`server.py`](server.py), [`redis_server.py`](redis_server.py), [`run_exp8.py`](run_exp8.py) |
 | **9** | **Raft Leader Election & Failover** | Consensus-driven fault tolerance, randomized election timeouts (1.5–3.0s), terms, quorum voting ($N//2+1$), gated coordination | [`proto/raft.proto`](proto/raft.proto), [`raft_node.py`](raft_node.py), [`raft_client.py`](raft_client.py), [`run_exp9.py`](run_exp9.py) |
+| **10** | **Deploy on Kubernetes & Simulate Load** | Containerized microservices, Headless Service (`clusterIP: None`), gRPC round-robin client-side load balancing, pod failover, load burst job | [`Dockerfile`](Dockerfile), [`net_config.py`](net_config.py), [`k8s/app.yaml`](k8s/app.yaml), [`k8s/load-test-job.yaml`](k8s/load-test-job.yaml), [`load_test.py`](load_test.py), [`run_exp10.py`](run_exp10.py) |
+| **11** | **Distributed File System (DFS)** | Decoupled metadata tracking, 64 KB chunking, R=2 replication, Lamport clock versioning, heartbeat timeout failure detection, silent corruption detection via SHA-256, self-healing chunk repair | [`proto/dfs.proto`](proto/dfs.proto), [`dfs_metadata.py`](dfs_metadata.py), [`dfs_storage.py`](dfs_storage.py), [`dfs_client.py`](dfs_client.py), [`dfs_repair.py`](dfs_repair.py), [`run_exp11.py`](run_exp11.py) |
 
 ---
 
@@ -80,6 +82,35 @@
   * Terminal 3: `python raft_node.py C`
   * Terminal 4 (Client Queries): `python raft_client.py A championship_slot 1`
 
+### Experiment 10: Kubernetes Deployment & Concurrent Load Simulation
+* **Automated Validator / Emulation Runner**: `python run_exp10.py`
+* **Live Cluster Execution (Docker Desktop / Minikube)**:
+  1. Build Image: `docker build -t myapp-backend:latest .`
+  2. Deploy Services: `kubectl apply -f k8s/app.yaml`
+  3. Verify Pods: `kubectl get pods`
+  4. Run Load Test Job: `kubectl apply -f k8s/load-test-job.yaml`
+  5. Inspect Logs: `kubectl wait --for=condition=complete job/load-test --timeout=90s && kubectl logs job/load-test`
+  6. Verify Multi-Pod Distribution:
+     ```bash
+     for p in $(kubectl get pods -l app=worker -o name); do echo $p; kubectl logs $p | grep -o "Handling request" | wc -l; done
+     ```
+  7. Cleanup: `kubectl delete job load-test && kubectl delete -f k8s/app.yaml`
+
+### Experiment 11: Distributed File System (Chunking, Replication, Failover & Repair)
+* **Automated Runner (All 6 Failure & Repair Tests)**: `python run_exp11.py`
+* **Manual 5 Terminals**:
+  * Terminal 1 (Metadata Server): `python dfs_metadata.py`
+  * Terminal 2 (Storage Node 1): `python dfs_storage.py 1`
+  * Terminal 3 (Storage Node 2): `python dfs_storage.py 2`
+  * Terminal 4 (Storage Node 3): `python dfs_storage.py 3`
+  * Terminal 5 (Client CLI & Repair):
+    ```bash
+    python dfs_client.py status
+    python dfs_client.py put photo.bin
+    python dfs_client.py get photo.bin out1.bin
+    python dfs_repair.py
+    ```
+
 ---
 
 ## 🎯 Viva Q&A Quick Summary
@@ -92,4 +123,7 @@
 6. **Exp 7 (Eventual Consistency - Gossip & LWW)**: Replicas accept local writes immediately (maximizing availability) and gossip asynchronously. Conflicts are resolved via Last-Write-Wins using `(lamport_timestamp, origin_replica)` tuples, guaranteeing eventual convergence after a brief disagreement window.
 7. **Exp 8 (Redis Caching & Fault Tolerance - Cache-Aside)**: Dual-key caching architecture where fast reads hit fresh keys (`fresh:item:` with TTL), and the system degrades gracefully under failure: if Redis fails, queries bypass directly to the backend; if the backend fails, queries fall back to never-expiring stale backup keys (`stale:item:`).
 8. **Exp 9 (Raft Leader Election & Failover)**: Consensus protocol establishing a single coordinator among replicas using randomized election timeouts (1.5–3.0s) to prevent split votes, monotonically increasing term counters to reject stale leaders, majority quorum ($N//2 + 1$) voting, and gated coordination where only the current active leader grants locks while followers redirect clients.
+9. **Exp 10 (Kubernetes Deployment & Load Balancing)**: Packaging microservices into containers, solving the "gRPC single-connection trap" using Headless Services (`clusterIP: None`) and client-side round-robin balancing, demonstrating Kubernetes pod self-healing, and simulating concurrent burst traffic via in-cluster Kubernetes Jobs.
+10. **Exp 11 (Distributed File System - GFS/HDFS style)**: Decoupling metadata from raw chunk storage, splitting large files into 64 KB chunks with $R=2$ replication, using Lamport clocks for file versions, heartbeat failure detection (6s), automated repair re-replication, and checksum verification with failover on disk corruption.
+
 

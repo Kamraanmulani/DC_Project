@@ -1,0 +1,261 @@
+# =============================================================================
+# Distributed Computing Lab - Experiment 10: Kubernetes Cluster Manifests
+# Complete ChessMate System: Headless Worker Pool, Raft Cluster, Backend & Redis
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. STATELESS WORKER POOL (EXP 6 & 10)
+# Scaled to 3 Replicas with Headless Service for Client-Side gRPC Round Robin
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels:
+    app: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: myapp-backend:latest
+        imagePullPolicy: Never
+        command: ["python", "-u", "worker_server.py", "60201"]
+        ports:
+        - containerPort: 60201
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+spec:
+  clusterIP: None  # HEADLESS SERVICE: Allows DNS to return all 3 pod IPs for gRPC LB
+  selector:
+    app: worker
+  ports:
+  - name: grpc
+    port: 60201
+    targetPort: 60201
+
+# -----------------------------------------------------------------------------
+# 2. RAFT CONSENSUS CLUSTER (EXP 9)
+# 3 Nodes (A, B, C) forming a Fault-Tolerant Leader Election & Lock Manager
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raft-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: raft-a
+  template:
+    metadata:
+      labels:
+        app: raft-a
+    spec:
+      containers:
+      - name: raft-a
+        image: myapp-backend:latest
+        imagePullPolicy: Never
+        command: ["python", "-u", "raft_node.py", "A"]
+        ports:
+        - containerPort: 60401
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raft-a
+spec:
+  selector:
+    app: raft-a
+  ports:
+  - port: 60401
+    targetPort: 60401
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raft-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: raft-b
+  template:
+    metadata:
+      labels:
+        app: raft-b
+    spec:
+      containers:
+      - name: raft-b
+        image: myapp-backend:latest
+        imagePullPolicy: Never
+        command: ["python", "-u", "raft_node.py", "B"]
+        ports:
+        - containerPort: 60402
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raft-b
+spec:
+  selector:
+    app: raft-b
+  ports:
+  - port: 60402
+    targetPort: 60402
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raft-c
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: raft-c
+  template:
+    metadata:
+      labels:
+        app: raft-c
+    spec:
+      containers:
+      - name: raft-c
+        image: myapp-backend:latest
+        imagePullPolicy: Never
+        command: ["python", "-u", "raft_node.py", "C"]
+        ports:
+        - containerPort: 60403
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raft-c
+spec:
+  selector:
+    app: raft-c
+  ports:
+  - port: 60403
+    targetPort: 60403
+
+# -----------------------------------------------------------------------------
+# 3. CHESS GAME SERVER BACKEND (EXP 2)
+# Core gRPC Game Manager managing chess rooms and move validation
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chess-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chess-backend
+  template:
+    metadata:
+      labels:
+        app: chess-backend
+    spec:
+      containers:
+      - name: chess-backend
+        image: myapp-backend:latest
+        imagePullPolicy: Never
+        command: ["python", "-u", "chess_server.py"]
+        ports:
+        - containerPort: 50051
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chess-backend
+spec:
+  selector:
+    app: chess-backend
+  ports:
+  - port: 50051
+    targetPort: 50051
+
+# -----------------------------------------------------------------------------
+# 4. REDIS IN-MEMORY CACHE (EXP 8)
+# Public lightweight Alpine Redis image
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+# -----------------------------------------------------------------------------
+# 5. CACHE GATEWAY SERVICE (EXP 8)
+# Cache-Aside reverse proxy with dual-key fault tolerance
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cache-gateway
+  template:
+    metadata:
+      labels:
+        app: cache-gateway
+    spec:
+      containers:
+      - name: cache-gateway
+        image: myapp-backend:latest
+        imagePullPolicy: Never
+        command: ["python", "-u", "cache_gateway.py", "1"]
+        ports:
+        - containerPort: 50050
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cache-gateway
+spec:
+  selector:
+    app: cache-gateway
+  ports:
+  - port: 50050
+    targetPort: 50050
